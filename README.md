@@ -33,5 +33,65 @@ Aplikacija je vizuelno i funkcionalno inspirisana iCar GPS aplikacijom, sa fokus
 Jovan Nedeljković — student, istraživač i praktičar koji kombinuje preciznost, vizuelnu jasnoću i edukativni pristup u svakom projektu.
 
 ---
+## ZIP struktura
 
+gps_tracker_ds/
+├── .gitignore
+├── README.md
+├── build.gradle
+├── gradle.properties
+├── gradlew
+├── gradlew.bat
+├── settings.gradle.kts
+├── gradle/
+│   └── wrapper/
+│       ├── gradle-wrapper.jar
+│       └── gradle-wrapper.properties
+├── .idea/
+│   ├── codeStyles/
+│   ├── libraries/
+│   ├── vcs.xml
+│   ├── misc.xml
+│   ├── modules.xml
+│   ├── workspace.xml
+│   └── ...
+└── app/
+    ├── build.gradle
+    ├── proguard-rules.pro
+    └── src/
+        └── main/
+            ├── AndroidManifest.xml
+            ├── java/
+            │   └── com/
+            │       └── jovannedeljkovicatvss/
+            │           └── gps_tracker_ds/
+            │               ├── MainActivity.kt
+            │               ├── data/
+            │               │   ├── model/
+            │               │   │   └── User.kt
+            │               │   └── repository/
+            │               │       └── LocationRepository.kt
+            │               ├── domain/
+            │               │   └── usecase/
+            │               │       └── TrackLocationUseCase.kt
+            │               ├── ui/
+            │               │   ├── login/
+            │               │   │   └── LoginScreen.kt
+            │               │   ├── map/
+            │               │   │   └── MapScreen.kt
+            │               │   └── components/
+            │               │       └── LocationButton.kt
+            │               ├── util/
+            │               │   └── LocationUtils.kt
+            │               └── navigation/
+            │                   └── AppNavigation.kt
+            └── res/
+                ├── layout/
+                │   └── activity_main.xml
+                ├── values/
+                │   ├── colors.xml
+                │   ├── strings.xml
+                │   └── themes.xml
+                └── drawable/
+                    └── ic_location.xml
 

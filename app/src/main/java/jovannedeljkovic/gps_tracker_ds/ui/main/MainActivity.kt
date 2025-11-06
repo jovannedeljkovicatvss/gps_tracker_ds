@@ -20,6 +20,7 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import jovannedeljkovic.gps_tracker_ds.App
+import jovannedeljkovic.gps_tracker_ds.R
 import jovannedeljkovic.gps_tracker_ds.data.entities.LocationPoint
 import jovannedeljkovic.gps_tracker_ds.data.entities.PointOfInterest
 import jovannedeljkovic.gps_tracker_ds.data.entities.Route
@@ -35,6 +36,11 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
+import java.io.File
+import java.io.FileWriter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -44,6 +50,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mapEventsOverlay: MapEventsOverlay
 
     private var currentLocationMarker: Marker? = null
+    private var myLocationMarker: Marker? = null
 
     // Tracking varijable
     private var isTracking = false
@@ -52,6 +59,7 @@ class MainActivity : AppCompatActivity() {
     private var currentRoute: Route? = null
     private val routePoints = mutableListOf<GeoPoint>()
     private var routePolyline: Polyline? = null
+    private var lastLocation: Location? = null
 
     // Point of Interest varijable
     private val pointsOfInterest = mutableListOf<PointOfInterest>()
@@ -83,11 +91,11 @@ class MainActivity : AppCompatActivity() {
 
         initializeMap()
         initializeLocationClient()
-        setupMapClickListeners() // Za Point of Interest klikove
+        setupMapClickListeners()
         setupClickListeners()
 
         // Inicijalizuj tracking UI
-        updateTrackingStats(0.0)
+        updateTrackingStats(0.0, 0.0)
 
         // Point of Interest funkcionalnosti
         setupPointOfInterestMode()
@@ -120,29 +128,27 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun longPressHelper(p: GeoPoint?): Boolean {
-                // Ne koristimo long press za sada
                 return false
             }
         }
 
         mapEventsOverlay = MapEventsOverlay(mapEventsReceiver)
-        map.overlays.add(0, mapEventsOverlay) // Dodaj na početak da ne prekriva druge overlay-e
+        map.overlays.add(0, mapEventsOverlay)
     }
 
     private fun initializeLocationClient() {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
-        // Kreiraj LocationRequest za real-time updates
         locationRequest = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
-            5000 // 5 sekundi
-        ).setMinUpdateIntervalMillis(3000) // 3 sekunde minimum
-            .setMaxUpdateDelayMillis(10000)   // 10 sekundi maksimalno kašnjenje
+            3000 // 3 sekunde
+        ).setMinUpdateIntervalMillis(2000) // 2 sekunde minimum
+            .setMaxUpdateDelayMillis(5000)   // 5 sekundi maksimalno kašnjenje
             .build()
 
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
-                locationResult.lastLocation?.let { location ->
+                locationResult.locations.forEach { location ->
                     val currentLocation = GeoPoint(location.latitude, location.longitude)
 
                     // Ažuriraj marker na mapi
@@ -152,8 +158,8 @@ class MainActivity : AppCompatActivity() {
                     if (isTracking) {
                         addPointToRoute(currentLocation)
 
-                        // Ažuriraj distancu
-                        updateDistance(currentLocation)
+                        // Ažuriraj distancu i brzinu
+                        updateDistanceAndSpeed(location)
                     }
                 }
             }
@@ -161,33 +167,27 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupClickListeners() {
-        // Meni dugme u toolbaru
         binding.btnMenu.setOnClickListener {
             showNavigationMenu()
         }
 
-        // Moja lokacija dugme
         binding.btnMyLocation.setOnClickListener {
             centerOnMyLocation()
         }
 
-        // Tracking mode dugme
         binding.btnTrackingMode.setOnClickListener {
             toggleTrackingMode()
         }
 
-        // Tracking dugmad
-        setupTrackingListeners()
-
-        // Eksport dugme
         binding.btnExport.setOnClickListener {
             exportRouteData()
         }
 
-        // Reset dugme
         binding.btnReset.setOnClickListener {
             resetCurrentRoute()
         }
+
+        setupTrackingListeners()
     }
 
     private fun centerOnMyLocation() {
@@ -203,32 +203,17 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // Koristimo lastLocation za brži rezultat
         fusedLocationClient.lastLocation
             .addOnSuccessListener { location: Location? ->
                 location?.let {
                     val currentLocation = GeoPoint(location.latitude, location.longitude)
-
-                    // Centriraj mapu na lokaciju
                     map.controller.animateTo(currentLocation)
                     map.controller.setZoom(18.0)
-
-                    // Prikaži marker
                     showMyLocationMarker(currentLocation)
-
-                    Toast.makeText(
-                        this,
-                        "Centrirano na vašu lokaciju!",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    Toast.makeText(this, "Centrirano na vašu lokaciju!", Toast.LENGTH_SHORT).show()
                 } ?: run {
-                    // Ako lastLocation nije dostupan, pokreni location updates
                     startLocationUpdates()
-                    Toast.makeText(
-                        this,
-                        "Tražim lokaciju...",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    Toast.makeText(this, "Tražim lokaciju...", Toast.LENGTH_SHORT).show()
                 }
             }
             .addOnFailureListener { e ->
@@ -238,21 +223,32 @@ class MainActivity : AppCompatActivity() {
 
     private fun showMyLocationMarker(location: GeoPoint) {
         // Ukloni stari marker
-        currentLocationMarker?.let { marker ->
+        myLocationMarker?.let { marker ->
             map.overlays.remove(marker)
         }
 
         // Kreiraj novi marker
         val marker = Marker(map).apply {
             position = location
-            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
             title = "Moja lokacija"
+            // Pokušaj da postaviš custom ikonicu ako postoji
+            try {
+                // Prvo proveri da li drawable postoji
+                val resourceId = resources.getIdentifier("ic_map_location_pin", "drawable", packageName)
+                if (resourceId != 0) {
+                    val drawable = ContextCompat.getDrawable(this@MainActivity, resourceId)
+                    setIcon(drawable)
+                }
+            } catch (e: Exception) {
+                // Koristi default ikonicu ako custom ne postoji
+                e.printStackTrace()
+            }
         }
 
         map.overlays.add(marker)
-        currentLocationMarker = marker
+        myLocationMarker = marker
 
-        // Ako je tracking aktivan, centriraj mapu automatski
         if (isTracking) {
             map.controller.animateTo(location)
         }
@@ -263,14 +259,9 @@ class MainActivity : AppCompatActivity() {
     private fun toggleTrackingMode() {
         trackingMode = if (trackingMode == "self") "all" else "self"
 
-        // Ažuriraj UI
-        if (trackingMode == "self") {
-            binding.btnTrackingMode.text = "Samo sebe"
-        } else {
-            binding.btnTrackingMode.text = "Svi uređaji"
-        }
-
-        Toast.makeText(this, "Režim praćenja: ${if (trackingMode == "self") "Samo sebe" else "Svi uređaji"}", Toast.LENGTH_SHORT).show()
+        // Ažuriraj tooltip ili toast sa trenutnim modom
+        val modeText = if (trackingMode == "self") "Samo sebe" else "Svi uređaji"
+        Toast.makeText(this, "Režim praćenja: $modeText", Toast.LENGTH_SHORT).show()
     }
 
     private fun showNavigationMenu() {
@@ -290,12 +281,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupTrackingListeners() {
-        // Start tracking
         binding.btnStartTracking.setOnClickListener {
             startTracking()
         }
 
-        // Stop tracking
         binding.btnStopTracking.setOnClickListener {
             stopTracking()
         }
@@ -314,7 +303,7 @@ class MainActivity : AppCompatActivity() {
         if (isPointMode) {
             binding.fabAddPoint.setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
             binding.fabAddPoint.backgroundTintList = ContextCompat.getColorStateList(this, android.R.color.holo_red_light)
-            Toast.makeText(this, "📌 Režim dodavanja tačaka\nKlikni na mapu da dodaš tačku", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "📌 Režim dodavanja tačaka - klikni na mapu", Toast.LENGTH_SHORT).show()
         } else {
             binding.fabAddPoint.setImageResource(android.R.drawable.ic_input_add)
             binding.fabAddPoint.backgroundTintList = ContextCompat.getColorStateList(this, android.R.color.holo_blue_light)
@@ -327,36 +316,38 @@ class MainActivity : AppCompatActivity() {
             hint = "Ime tačke"
         }
 
-        val dialog = AlertDialog.Builder(this)
+        AlertDialog.Builder(this)
             .setTitle("Dodaj tačku")
-            .setMessage("Unesi ime tačke:")
             .setView(editText)
             .setPositiveButton("Dodaj") { dialog, _ ->
                 val name = editText.text?.toString()?.takeIf { it.isNotBlank() } ?: "Nova tačka"
                 addPointOfInterest(name, location)
             }
             .setNegativeButton("Otkaži", null)
-            .create()
-
-        dialog.show()
+            .show()
     }
 
     private fun addPointOfInterest(name: String, location: GeoPoint) {
         lifecycleScope.launch(Dispatchers.IO) {
-            val app = application as App
-            val point = PointOfInterest(
-                userId = "user-${System.currentTimeMillis()}",
-                name = name,
-                latitude = location.latitude,
-                longitude = location.longitude
-            )
+            try {
+                val app = application as App
+                val point = PointOfInterest(
+                    userId = "current-user", // Koristi konstantan user ID za bolje čuvanje
+                    name = name,
+                    latitude = location.latitude,
+                    longitude = location.longitude
+                )
 
-            app.pointRepository.addPoint(point)
-            pointsOfInterest.add(point)
+                app.pointRepository.addPoint(point)
 
-            runOnUiThread {
-                addPointMarker(point)
-                Toast.makeText(this@MainActivity, "Tačka '$name' dodata!", Toast.LENGTH_SHORT).show()
+                runOnUiThread {
+                    addPointMarker(point)
+                    Toast.makeText(this@MainActivity, "Tačka '$name' dodata!", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "Greška pri čuvanju tačke: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -398,7 +389,7 @@ class MainActivity : AppCompatActivity() {
             hint = "Novo ime tačke"
         }
 
-        val dialog = AlertDialog.Builder(this)
+        AlertDialog.Builder(this)
             .setTitle("Preimenuj tačku")
             .setView(editText)
             .setPositiveButton("Sačuvaj") { dialog, _ ->
@@ -406,21 +397,25 @@ class MainActivity : AppCompatActivity() {
                 renamePoint(point, newName)
             }
             .setNegativeButton("Otkaži", null)
-            .create()
-
-        dialog.show()
+            .show()
     }
 
     private fun renamePoint(point: PointOfInterest, newName: String) {
         lifecycleScope.launch(Dispatchers.IO) {
-            val app = application as App
-            val updatedPoint = point.copy(name = newName)
-            app.pointRepository.updatePoint(updatedPoint)
+            try {
+                val app = application as App
+                val updatedPoint = point.copy(name = newName)
+                app.pointRepository.updatePoint(updatedPoint)
 
-            runOnUiThread {
-                pointMarkers[point.id]?.title = newName
-                map.invalidate()
-                Toast.makeText(this@MainActivity, "Tačka preimenovana u '$newName'", Toast.LENGTH_SHORT).show()
+                runOnUiThread {
+                    pointMarkers[point.id]?.title = newName
+                    map.invalidate()
+                    Toast.makeText(this@MainActivity, "Tačka preimenovana u '$newName'", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "Greška pri preimenovanju", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -438,24 +433,29 @@ class MainActivity : AppCompatActivity() {
 
     private fun deletePoint(point: PointOfInterest, marker: Marker) {
         lifecycleScope.launch(Dispatchers.IO) {
-            val app = application as App
-            app.pointRepository.deletePoint(point)
-            pointsOfInterest.remove(point)
+            try {
+                val app = application as App
+                app.pointRepository.deletePoint(point)
 
-            runOnUiThread {
-                map.overlays.remove(marker)
-                pointMarkers.remove(point.id)
-                map.invalidate()
-                Toast.makeText(this@MainActivity, "Tačka '${point.name}' obrisana", Toast.LENGTH_SHORT).show()
+                runOnUiThread {
+                    map.overlays.remove(marker)
+                    pointMarkers.remove(point.id)
+                    map.invalidate()
+                    Toast.makeText(this@MainActivity, "Tačka '${point.name}' obrisana", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "Greška pri brisanju", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
 
     private fun loadPointsOfInterest() {
         lifecycleScope.launch(Dispatchers.IO) {
-            val app = application as App
             try {
-                val points = app.pointRepository.getUserPoints("user-default")
+                val app = application as App
+                val points = app.pointRepository.getUserPoints("current-user")
 
                 runOnUiThread {
                     points.forEach { point ->
@@ -476,30 +476,27 @@ class MainActivity : AppCompatActivity() {
         trackingStartTime = System.currentTimeMillis()
         totalDistance = 0.0
         routePoints.clear()
+        lastLocation = null
 
-        // Kreiraj novu rutu u bazi
         lifecycleScope.launch(Dispatchers.IO) {
             val app = application as App
             currentRoute = Route(
-                userId = "user-${System.currentTimeMillis()}",
-                name = "Ruta ${java.text.SimpleDateFormat("dd.MM.yyyy HH:mm").format(java.util.Date())}"
+                userId = "current-user",
+                name = "Ruta ${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())}"
             )
             val routeId = app.routeRepository.createRoute(currentRoute!!)
             currentRoute = currentRoute!!.copy(id = routeId)
         }
 
-        // Pokreni location updates ako već nisu aktivni
         if (!isLocationUpdatesActive) {
             startLocationUpdates()
         }
 
-        // Update UI
         binding.btnStartTracking.isEnabled = false
         binding.btnStopTracking.isEnabled = true
         binding.btnExport.isEnabled = false
         binding.btnReset.isEnabled = false
 
-        // Pokreni TrackingService
         val intent = Intent(this, TrackingService::class.java).apply {
             action = "START_TRACKING"
         }
@@ -511,19 +508,16 @@ class MainActivity : AppCompatActivity() {
     private fun stopTracking() {
         isTracking = false
 
-        // Update UI
         binding.btnStartTracking.isEnabled = true
         binding.btnStopTracking.isEnabled = false
         binding.btnExport.isEnabled = true
         binding.btnReset.isEnabled = true
 
-        // Zaustavi TrackingService
         val intent = Intent(this, TrackingService::class.java).apply {
             action = "STOP_TRACKING"
         }
         startService(intent)
 
-        // Ažuriraj rutu u bazi
         currentRoute?.let { route ->
             val duration = System.currentTimeMillis() - trackingStartTime
             val completedRoute = route.copy(
@@ -539,7 +533,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Prikaži statistike
         val duration = (System.currentTimeMillis() - trackingStartTime) / 1000
         val minutes = duration / 60
         val seconds = duration % 60
@@ -551,19 +544,24 @@ class MainActivity : AppCompatActivity() {
         ).show()
     }
 
-    private fun updateTrackingStats(distance: Double) {
-        totalDistance = distance
-        binding.tvDistance.text = "Udaljenost: ${String.format("%.2f", distance)} m"
+    private fun updateDistanceAndSpeed(newLocation: Location) {
+        lastLocation?.let { lastLoc ->
+            val distance = lastLoc.distanceTo(newLocation).toDouble()
+            totalDistance += distance
 
-        if (isTracking && trackingStartTime > 0) {
-            val durationHours = (System.currentTimeMillis() - trackingStartTime) / 3600000.0
-            if (durationHours > 0) {
-                val speedKmh = (distance / 1000) / durationHours
-                binding.tvSpeed.text = "Brzina: ${String.format("%.2f", speedKmh)} km/h"
-            }
-        } else {
-            binding.tvSpeed.text = "Brzina: 0.0 km/h"
+            // Izračunaj brzinu (m/s u km/h)
+            val timeDiff = (newLocation.time - lastLoc.time) / 1000.0 // u sekundama
+            val speedMs = if (timeDiff > 0) distance / timeDiff else 0.0
+            val speedKmh = speedMs * 3.6
+
+            updateTrackingStats(totalDistance, speedKmh)
         }
+        lastLocation = newLocation
+    }
+
+    private fun updateTrackingStats(distance: Double, speed: Double) {
+        binding.tvDistance.text = "Udaljenost: ${String.format("%.2f", distance)} m"
+        binding.tvSpeed.text = "Brzina: ${String.format("%.2f", speed)} km/h"
     }
 
     private fun exportRouteData() {
@@ -573,42 +571,76 @@ class MainActivity : AppCompatActivity() {
         }
 
         lifecycleScope.launch(Dispatchers.IO) {
-            val app = application as App
-            val points = app.routeRepository.getRoutePoints(currentRoute!!.id)
+            try {
+                val app = application as App
+                val points = app.routeRepository.getRoutePoints(currentRoute!!.id)
 
-            runOnUiThread {
-                Toast.makeText(
-                    this@MainActivity,
-                    "Podaci spremni za eksport!\n${points.size} tačaka",
-                    Toast.LENGTH_LONG
-                ).show()
+                // Kreiraj CSV fajl
+                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                val fileName = "gps_tracker_export_$timestamp.csv"
+                val file = File(getExternalFilesDir(null), fileName)
 
-                val exportText = """
-                    GPS Tracker - Eksport rute
-                    Ruta: ${currentRoute!!.name}
-                    Udaljenost: ${String.format("%.2f", totalDistance)} m
-                    Tačaka: ${points.size}
-                """.trimIndent()
+                FileWriter(file).use { writer ->
+                    // Header
+                    writer.append("Latitude,Longitude,Timestamp,Distance\n")
 
-                println("📤 EKSPORT PODACI:\n$exportText")
+                    // Podaci
+                    var cumulativeDistance = 0.0
+                    points.forEachIndexed { index, point ->
+                        if (index > 0) {
+                            val prevPoint = points[index - 1]
+                            val distance = calculateDistance(
+                                GeoPoint(prevPoint.latitude, prevPoint.longitude),
+                                GeoPoint(point.latitude, point.longitude)
+                            )
+                            cumulativeDistance += distance
+                        }
+                        writer.append("${point.latitude},${point.longitude},${point.timestamp},${String.format("%.2f", cumulativeDistance)}\n")
+                    }
+                }
+
+                runOnUiThread {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Podaci eksportovani u: ${file.absolutePath}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Greška pri eksportu: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
         }
+    }
+
+    private fun calculateDistance(point1: GeoPoint, point2: GeoPoint): Double {
+        val results = FloatArray(1)
+        Location.distanceBetween(
+            point1.latitude, point1.longitude,
+            point2.latitude, point2.longitude,
+            results
+        )
+        return results[0].toDouble()
     }
 
     private fun resetCurrentRoute() {
         currentRoute = null
         routePoints.clear()
         totalDistance = 0.0
+        lastLocation = null
 
-        // Ukloni polyline sa mape
         routePolyline?.let { polyline ->
             map.overlays.remove(polyline)
             map.invalidate()
         }
         routePolyline = null
 
-        // Resetuj UI
-        updateTrackingStats(0.0)
+        updateTrackingStats(0.0, 0.0)
         binding.btnExport.isEnabled = false
         binding.btnReset.isEnabled = false
 
@@ -620,32 +652,29 @@ class MainActivity : AppCompatActivity() {
 
         routePoints.add(location)
 
-        // Dodaj tačku u bazu
         currentRoute?.let { route ->
             lifecycleScope.launch(Dispatchers.IO) {
                 val app = application as App
                 val point = LocationPoint(
                     routeId = route.id,
                     latitude = location.latitude,
-                    longitude = location.longitude
+                    longitude = location.longitude,
+                    timestamp = System.currentTimeMillis()
                 )
                 app.routeRepository.addLocationPoint(point)
             }
         }
 
-        // Ažuriraj polyline na mapi
         updateRoutePolyline()
     }
 
     private fun updateRoutePolyline() {
         if (routePoints.size < 2) return
 
-        // Ukloni stari polyline
         routePolyline?.let { polyline ->
             map.overlays.remove(polyline)
         }
 
-        // Kreiraj novi polyline
         routePolyline = Polyline().apply {
             setPoints(routePoints)
             color = Color.RED
@@ -656,28 +685,6 @@ class MainActivity : AppCompatActivity() {
         map.invalidate()
     }
 
-    // Metoda za ažuriranje distance
-    private fun updateDistance(newLocation: GeoPoint) {
-        if (routePoints.isNotEmpty()) {
-            val lastLocation = routePoints.last()
-            val distance = calculateDistance(lastLocation, newLocation)
-            totalDistance += distance
-            updateTrackingStats(totalDistance)
-        }
-    }
-
-    // Metoda za računanje distance između dve tačke
-    private fun calculateDistance(point1: GeoPoint, point2: GeoPoint): Double {
-        val results = FloatArray(1)
-        Location.distanceBetween(
-            point1.latitude, point1.longitude,
-            point2.latitude, point2.longitude,
-            results
-        )
-        return results[0].toDouble()
-    }
-
-    // Metode za upravljanje location updates
     private fun startLocationUpdates() {
         if (ActivityCompat.checkSelfPermission(
                 this,
@@ -709,7 +716,6 @@ class MainActivity : AppCompatActivity() {
                 this,
                 Manifest.permission.ACCESS_FINE_LOCATION
             ) == PackageManager.PERMISSION_GRANTED -> {
-                // Pokreni location updates kada su dozvole date
                 startLocationUpdates()
             }
             ActivityCompat.shouldShowRequestPermissionRationale(
@@ -718,7 +724,7 @@ class MainActivity : AppCompatActivity() {
             ) -> {
                 Toast.makeText(
                     this,
-                    "Lokacija je potrebna za prikaz vaše trenutne pozicije na mapi",
+                    "Lokacija je potrebna za praćenje kretanja",
                     Toast.LENGTH_LONG
                 ).show()
                 requestLocationPermissions()
@@ -749,12 +755,11 @@ class MainActivity : AppCompatActivity() {
         when (requestCode) {
             LOCATION_PERMISSION_REQUEST_CODE -> {
                 if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    // Dozvole su date, pokreni location updates
                     startLocationUpdates()
                 } else {
                     Toast.makeText(
                         this,
-                        "Lokacija nije dozvoljena. Aplikacija će raditi sa podrazumevanom mapom.",
+                        "Lokacija nije dozvoljena. Neke funkcionalnosti neće raditi.",
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -798,9 +803,6 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         map.onPause()
-        if (isLocationUpdatesActive) {
-            stopLocationUpdates()
-        }
     }
 
     override fun onDestroy() {

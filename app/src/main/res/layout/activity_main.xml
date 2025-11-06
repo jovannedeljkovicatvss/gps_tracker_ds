@@ -11,8 +11,9 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Kompaktni Toolbar na vrhu sa transparentnim dugmadima -->
+    <!-- Toolbar na vrhu -->
     <LinearLayout
+        android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentTop="true"
@@ -21,65 +22,85 @@
         android:padding="12dp"
         android:elevation="8dp">
 
-        <!-- Ikona menija -->
+        <!-- Naslov -->
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="GPS Tracker"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@android:color/white"
+            android:gravity="center" />
+
+        <!-- Meni ikonica - tri linije u desnom uglu -->
         <ImageButton
             android:id="@+id/btnMenu"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:layout_marginEnd="12dp"
             android:background="@drawable/button_transparent"
-            android:src="@android:drawable/ic_menu_more"
+            android:src="@drawable/ic_menu_white"
             android:contentDescription="Meni"
             android:padding="8dp" />
 
+    </LinearLayout>
+
+    <!-- Kontrolni panel - DESNA IVICA EKRANA, ISPOD TOOLBARA -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentEnd="true"
+        android:layout_below="@+id/toolbar"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="8dp"
+        android:orientation="vertical"
+        android:padding="4dp"
+        android:background="@drawable/panel_background"
+        android:elevation="8dp">
+
         <!-- Tracking Mode dugme -->
-        <Button
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/btnTrackingMode"
-            android:layout_width="0dp"
-            android:layout_height="32dp"
-            android:layout_weight="1"
-            android:text="Pratim: Samo sebe"
-            android:textSize="10sp"
-            android:background="@drawable/button_transparent"
-            android:textColor="@android:color/white"
-            android:layout_marginEnd="4dp"
-            android:padding="4dp" />
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginBottom="8dp"
+            android:src="@drawable/ic_tracking_mode"
+            android:contentDescription="Režim praćenja"
+            app:fabSize="mini"
+            app:tint="@android:color/white" />
 
         <!-- Moja lokacija dugme -->
-        <Button
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/btnMyLocation"
-            android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:text="📍"
-            android:textSize="12sp"
-            android:background="@drawable/button_transparent"
-            android:textColor="@android:color/white"
-            android:layout_marginEnd="4dp"
-            android:padding="4dp" />
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginBottom="8dp"
+            android:src="@drawable/ic_my_location"
+            android:contentDescription="Moja lokacija"
+            app:fabSize="mini"
+            app:tint="@android:color/white" />
 
         <!-- Export dugme -->
-        <Button
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/btnExport"
-            android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:text="📤"
-            android:textSize="12sp"
-            android:background="@drawable/button_transparent"
-            android:textColor="@android:color/white"
-            android:layout_marginEnd="4dp"
-            android:padding="4dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginBottom="8dp"
+            android:src="@drawable/ic_export"
+            android:contentDescription="Export"
+            app:fabSize="mini"
+            app:tint="@android:color/white"
             android:enabled="false" />
 
         <!-- Reset dugme -->
-        <Button
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/btnReset"
-            android:layout_width="wrap_content"
-            android:layout_height="32dp"
-            android:text="🔄"
-            android:textSize="12sp"
-            android:background="@drawable/button_transparent"
-            android:textColor="@android:color/white"
-            android:padding="4dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@drawable/ic_reset"
+            android:contentDescription="Reset"
+            app:fabSize="mini"
+            app:tint="@android:color/white"
             android:enabled="false" />
 
     </LinearLayout>

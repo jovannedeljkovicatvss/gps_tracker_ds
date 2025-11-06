@@ -56,6 +56,8 @@ dependencies {
     // Location Services
     implementation 'com.google.android.gms:play-services-location:21.0.1'
 
+    // Material Design ikonice
+    implementation 'com.google.android.material:material:1.10.0'
     // ... ostali dependencies
 
     implementation 'androidx.cardview:cardview:1.0.0'

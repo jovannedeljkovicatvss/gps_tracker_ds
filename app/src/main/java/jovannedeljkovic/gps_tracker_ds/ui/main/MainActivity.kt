@@ -3,6 +3,7 @@ package jovannedeljkovic.gps_tracker_ds.ui.main
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.location.Location
 import android.os.Bundle
 import android.widget.EditText
@@ -13,7 +14,11 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import jovannedeljkovic.gps_tracker_ds.App
 import jovannedeljkovic.gps_tracker_ds.data.entities.LocationPoint
 import jovannedeljkovic.gps_tracker_ds.data.entities.PointOfInterest
@@ -23,9 +28,11 @@ import jovannedeljkovic.gps_tracker_ds.service.TrackingService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
+import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 
@@ -34,8 +41,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var map: MapView
     private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private lateinit var mapEventsOverlay: MapEventsOverlay
 
-    private var isFollowingLocation = false
     private var currentLocationMarker: Marker? = null
 
     // Tracking varijable
@@ -50,6 +57,14 @@ class MainActivity : AppCompatActivity() {
     private val pointsOfInterest = mutableListOf<PointOfInterest>()
     private val pointMarkers = mutableMapOf<String, Marker>()
     private var isPointMode = false
+
+    // Location updates varijable
+    private lateinit var locationRequest: LocationRequest
+    private lateinit var locationCallback: LocationCallback
+    private var isLocationUpdatesActive = false
+
+    // Nove varijable za tracking mode
+    private var trackingMode = "self" // "self" ili "all"
 
     companion object {
         private const val LOCATION_PERMISSION_REQUEST_CODE = 1001
@@ -68,6 +83,7 @@ class MainActivity : AppCompatActivity() {
 
         initializeMap()
         initializeLocationClient()
+        setupMapClickListeners() // Za Point of Interest klikove
         setupClickListeners()
 
         // Inicijalizuj tracking UI
@@ -75,7 +91,6 @@ class MainActivity : AppCompatActivity() {
 
         // Point of Interest funkcionalnosti
         setupPointOfInterestMode()
-        setupMapClickListener()
         loadPointsOfInterest()
 
         checkLocationPermissions()
@@ -92,35 +107,73 @@ class MainActivity : AppCompatActivity() {
         controller.setCenter(defaultLocation)
     }
 
-    private fun initializeLocationClient() {
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-    }
+    private fun setupMapClickListeners() {
+        val mapEventsReceiver = object : MapEventsReceiver {
+            override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
+                p?.let { geoPoint ->
+                    if (isPointMode) {
+                        showAddPointDialog(geoPoint)
+                        return true
+                    }
+                }
+                return false
+            }
 
-    private fun setupClickListeners() {
-        // FAB za lokaciju - toggle follow mode
-        binding.fabMyLocation.setOnClickListener {
-            if (isFollowingLocation) {
-                // Isključi follow mode
-                isFollowingLocation = false
-                updateFabIcon()
-                Toast.makeText(this, "Auto-follow isključen", Toast.LENGTH_SHORT).show()
-            } else {
-                // Uključi follow mode i centriraj
-                isFollowingLocation = true
-                updateFabIcon()
-                getCurrentLocation()
-                Toast.makeText(this, "Auto-follow uključen", Toast.LENGTH_SHORT).show()
+            override fun longPressHelper(p: GeoPoint?): Boolean {
+                // Ne koristimo long press za sada
+                return false
             }
         }
 
-        // Odjava dugme
-        binding.btnLogout.setOnClickListener {
-            // Zaustavi tracking ako je aktivan
-            if (isTracking) {
-                stopTracking()
+        mapEventsOverlay = MapEventsOverlay(mapEventsReceiver)
+        map.overlays.add(0, mapEventsOverlay) // Dodaj na početak da ne prekriva druge overlay-e
+    }
+
+    private fun initializeLocationClient() {
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
+        // Kreiraj LocationRequest za real-time updates
+        locationRequest = LocationRequest.Builder(
+            Priority.PRIORITY_HIGH_ACCURACY,
+            5000 // 5 sekundi
+        ).setMinUpdateIntervalMillis(3000) // 3 sekunde minimum
+            .setMaxUpdateDelayMillis(10000)   // 10 sekundi maksimalno kašnjenje
+            .build()
+
+        locationCallback = object : LocationCallback() {
+            override fun onLocationResult(locationResult: LocationResult) {
+                locationResult.lastLocation?.let { location ->
+                    val currentLocation = GeoPoint(location.latitude, location.longitude)
+
+                    // Ažuriraj marker na mapi
+                    showMyLocationMarker(currentLocation)
+
+                    // Ako je tracking aktivan, dodaj tačku u rutu
+                    if (isTracking) {
+                        addPointToRoute(currentLocation)
+
+                        // Ažuriraj distancu
+                        updateDistance(currentLocation)
+                    }
+                }
             }
-            finish()
-            Toast.makeText(this, "Uspešno ste se odjavili", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun setupClickListeners() {
+        // Meni dugme u toolbaru
+        binding.btnMenu.setOnClickListener {
+            showNavigationMenu()
+        }
+
+        // Moja lokacija dugme
+        binding.btnMyLocation.setOnClickListener {
+            centerOnMyLocation()
+        }
+
+        // Tracking mode dugme
+        binding.btnTrackingMode.setOnClickListener {
+            toggleTrackingMode()
         }
 
         // Tracking dugmad
@@ -137,6 +190,105 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun centerOnMyLocation() {
+        if (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestLocationPermissions()
+            return
+        }
+
+        // Koristimo lastLocation za brži rezultat
+        fusedLocationClient.lastLocation
+            .addOnSuccessListener { location: Location? ->
+                location?.let {
+                    val currentLocation = GeoPoint(location.latitude, location.longitude)
+
+                    // Centriraj mapu na lokaciju
+                    map.controller.animateTo(currentLocation)
+                    map.controller.setZoom(18.0)
+
+                    // Prikaži marker
+                    showMyLocationMarker(currentLocation)
+
+                    Toast.makeText(
+                        this,
+                        "Centrirano na vašu lokaciju!",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } ?: run {
+                    // Ako lastLocation nije dostupan, pokreni location updates
+                    startLocationUpdates()
+                    Toast.makeText(
+                        this,
+                        "Tražim lokaciju...",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+            .addOnFailureListener { e ->
+                Toast.makeText(this, "Greška: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+    }
+
+    private fun showMyLocationMarker(location: GeoPoint) {
+        // Ukloni stari marker
+        currentLocationMarker?.let { marker ->
+            map.overlays.remove(marker)
+        }
+
+        // Kreiraj novi marker
+        val marker = Marker(map).apply {
+            position = location
+            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+            title = "Moja lokacija"
+        }
+
+        map.overlays.add(marker)
+        currentLocationMarker = marker
+
+        // Ako je tracking aktivan, centriraj mapu automatski
+        if (isTracking) {
+            map.controller.animateTo(location)
+        }
+
+        map.invalidate()
+    }
+
+    private fun toggleTrackingMode() {
+        trackingMode = if (trackingMode == "self") "all" else "self"
+
+        // Ažuriraj UI
+        if (trackingMode == "self") {
+            binding.btnTrackingMode.text = "Samo sebe"
+        } else {
+            binding.btnTrackingMode.text = "Svi uređaji"
+        }
+
+        Toast.makeText(this, "Režim praćenja: ${if (trackingMode == "self") "Samo sebe" else "Svi uređaji"}", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showNavigationMenu() {
+        val options = arrayOf("Postavke", "Istorija", "Pomoć", "Odjava")
+
+        AlertDialog.Builder(this)
+            .setTitle("Meni")
+            .setItems(options) { dialog, which ->
+                when (which) {
+                    0 -> showSettings()
+                    1 -> showHistory()
+                    2 -> showHelp()
+                    3 -> logout()
+                }
+            }
+            .show()
+    }
+
     private fun setupTrackingListeners() {
         // Start tracking
         binding.btnStartTracking.setOnClickListener {
@@ -151,7 +303,6 @@ class MainActivity : AppCompatActivity() {
 
     // POINT OF INTEREST FUNKCIONALNOSTI
     private fun setupPointOfInterestMode() {
-        // FAB za point mode
         binding.fabAddPoint.setOnClickListener {
             togglePointMode()
         }
@@ -168,16 +319,6 @@ class MainActivity : AppCompatActivity() {
             binding.fabAddPoint.setImageResource(android.R.drawable.ic_input_add)
             binding.fabAddPoint.backgroundTintList = ContextCompat.getColorStateList(this, android.R.color.holo_blue_light)
             Toast.makeText(this, "Režim dodavanja tačaka isključen", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun setupMapClickListener() {
-        map.setOnClickListener { event ->
-            if (isPointMode) {
-                val iGeoPoint = map.projection.fromPixels(event.x.toInt(), event.y.toInt())
-                val geoPoint = GeoPoint(iGeoPoint.latitude, iGeoPoint.longitude)
-                showAddPointDialog(geoPoint)
-            }
         }
     }
 
@@ -277,7 +418,6 @@ class MainActivity : AppCompatActivity() {
             app.pointRepository.updatePoint(updatedPoint)
 
             runOnUiThread {
-                // Ažuriraj marker
                 pointMarkers[point.id]?.title = newName
                 map.invalidate()
                 Toast.makeText(this@MainActivity, "Tačka preimenovana u '$newName'", Toast.LENGTH_SHORT).show()
@@ -303,7 +443,6 @@ class MainActivity : AppCompatActivity() {
             pointsOfInterest.remove(point)
 
             runOnUiThread {
-                // Ukloni marker
                 map.overlays.remove(marker)
                 pointMarkers.remove(point.id)
                 map.invalidate()
@@ -349,11 +488,14 @@ class MainActivity : AppCompatActivity() {
             currentRoute = currentRoute!!.copy(id = routeId)
         }
 
+        // Pokreni location updates ako već nisu aktivni
+        if (!isLocationUpdatesActive) {
+            startLocationUpdates()
+        }
+
         // Update UI
         binding.btnStartTracking.isEnabled = false
         binding.btnStopTracking.isEnabled = true
-        binding.btnStartTracking.setBackgroundColor(ContextCompat.getColor(this, android.R.color.darker_gray))
-        binding.btnStopTracking.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_red_dark))
         binding.btnExport.isEnabled = false
         binding.btnReset.isEnabled = false
 
@@ -372,8 +514,6 @@ class MainActivity : AppCompatActivity() {
         // Update UI
         binding.btnStartTracking.isEnabled = true
         binding.btnStopTracking.isEnabled = false
-        binding.btnStartTracking.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
-        binding.btnStopTracking.setBackgroundColor(ContextCompat.getColor(this, android.R.color.darker_gray))
         binding.btnExport.isEnabled = true
         binding.btnReset.isEnabled = true
 
@@ -415,7 +555,6 @@ class MainActivity : AppCompatActivity() {
         totalDistance = distance
         binding.tvDistance.text = "Udaljenost: ${String.format("%.2f", distance)} m"
 
-        // Izračunaj brzinu (prosečna brzina)
         if (isTracking && trackingStartTime > 0) {
             val durationHours = (System.currentTimeMillis() - trackingStartTime) / 3600000.0
             if (durationHours > 0) {
@@ -509,7 +648,7 @@ class MainActivity : AppCompatActivity() {
         // Kreiraj novi polyline
         routePolyline = Polyline().apply {
             setPoints(routePoints)
-            color = ContextCompat.getColor(this@MainActivity, android.R.color.holo_blue_dark)
+            color = Color.RED
             width = 8.0f
         }
 
@@ -517,12 +656,51 @@ class MainActivity : AppCompatActivity() {
         map.invalidate()
     }
 
-    private fun updateFabIcon() {
-        if (isFollowingLocation) {
-            binding.fabMyLocation.setImageResource(android.R.drawable.ic_media_play)
-        } else {
-            binding.fabMyLocation.setImageResource(android.R.drawable.ic_menu_mylocation)
+    // Metoda za ažuriranje distance
+    private fun updateDistance(newLocation: GeoPoint) {
+        if (routePoints.isNotEmpty()) {
+            val lastLocation = routePoints.last()
+            val distance = calculateDistance(lastLocation, newLocation)
+            totalDistance += distance
+            updateTrackingStats(totalDistance)
         }
+    }
+
+    // Metoda za računanje distance između dve tačke
+    private fun calculateDistance(point1: GeoPoint, point2: GeoPoint): Double {
+        val results = FloatArray(1)
+        Location.distanceBetween(
+            point1.latitude, point1.longitude,
+            point2.latitude, point2.longitude,
+            results
+        )
+        return results[0].toDouble()
+    }
+
+    // Metode za upravljanje location updates
+    private fun startLocationUpdates() {
+        if (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
+        fusedLocationClient.requestLocationUpdates(
+            locationRequest,
+            locationCallback,
+            null
+        )
+        isLocationUpdatesActive = true
+    }
+
+    private fun stopLocationUpdates() {
+        fusedLocationClient.removeLocationUpdates(locationCallback)
+        isLocationUpdatesActive = false
     }
 
     private fun checkLocationPermissions() {
@@ -531,7 +709,8 @@ class MainActivity : AppCompatActivity() {
                 this,
                 Manifest.permission.ACCESS_FINE_LOCATION
             ) == PackageManager.PERMISSION_GRANTED -> {
-                getCurrentLocation()
+                // Pokreni location updates kada su dozvole date
+                startLocationUpdates()
             }
             ActivityCompat.shouldShowRequestPermissionRationale(
                 this,
@@ -570,7 +749,8 @@ class MainActivity : AppCompatActivity() {
         when (requestCode) {
             LOCATION_PERMISSION_REQUEST_CODE -> {
                 if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    getCurrentLocation()
+                    // Dozvole su date, pokreni location updates
+                    startLocationUpdates()
                 } else {
                     Toast.makeText(
                         this,
@@ -582,92 +762,51 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun getCurrentLocation() {
-        if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            return
-        }
-
-        showLoading()
-
-        fusedLocationClient.lastLocation
-            .addOnSuccessListener { location: Location? ->
-                location?.let {
-                    val currentLocation = GeoPoint(location.latitude, location.longitude)
-                    showLocationOnMap(currentLocation)
-
-                    // Dodaj tačku u rutu ako je tracking aktivan
-                    if (isTracking) {
-                        addPointToRoute(currentLocation)
-                    }
-
-                    Toast.makeText(
-                        this,
-                        "Lokacija pronađena!",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                } ?: run {
-                    Toast.makeText(
-                        this,
-                        "Lokacija nije dostupna. Proverite GPS.",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-                hideLoading()
-            }
-            .addOnFailureListener { e ->
-                Toast.makeText(this, "Greška: ${e.message}", Toast.LENGTH_SHORT).show()
-                hideLoading()
-            }
+    private fun showSettings() {
+        Toast.makeText(this, "Postavke će biti dostupne uskoro", Toast.LENGTH_SHORT).show()
     }
 
-    private fun showLocationOnMap(location: GeoPoint) {
-        // Ukloni stari marker
-        currentLocationMarker?.let { marker ->
-            map.overlays.remove(marker)
-        }
-
-        // Kreiraj novi marker
-        val marker = Marker(map)
-        marker.position = location
-        marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-        marker.title = "Vaša lokacija"
-
-        map.overlays.add(marker)
-        currentLocationMarker = marker
-
-        // Auto-follow ako je uključen
-        if (isFollowingLocation) {
-            map.controller.animateTo(location)
-        }
-
-        map.invalidate()
+    private fun showHistory() {
+        Toast.makeText(this, "Istorija će biti dostupna uskoro", Toast.LENGTH_SHORT).show()
     }
 
-    private fun showLoading() {
-        binding.fabMyLocation.isEnabled = false
-        binding.fabMyLocation.setImageResource(android.R.drawable.ic_popup_sync)
+    private fun showHelp() {
+        Toast.makeText(this, "Pomoć će biti dostupna uskoro", Toast.LENGTH_SHORT).show()
     }
 
-    private fun hideLoading() {
-        binding.fabMyLocation.isEnabled = true
-        updateFabIcon()
+    private fun logout() {
+        if (isTracking) {
+            stopTracking()
+        }
+        if (isLocationUpdatesActive) {
+            stopLocationUpdates()
+        }
+        finish()
+        Toast.makeText(this, "Uspešno ste se odjavili", Toast.LENGTH_SHORT).show()
     }
 
     // Lifecycle metode za mapu
     override fun onResume() {
         super.onResume()
         map.onResume()
+        if ((isTracking || !isLocationUpdatesActive) &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            startLocationUpdates()
+        }
     }
 
     override fun onPause() {
         super.onPause()
         map.onPause()
+        if (isLocationUpdatesActive) {
+            stopLocationUpdates()
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (isLocationUpdatesActive) {
+            stopLocationUpdates()
+        }
     }
 }

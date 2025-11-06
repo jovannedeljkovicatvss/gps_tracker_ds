@@ -30,4 +30,18 @@ class RouteRepository(private val routeDao: RouteDao) {
     suspend fun getRouteById(routeId: String): Route? {
         return routeDao.getRouteById(routeId)
     }
+
+    // DODATA METODA ZA BRISANJE RUTE
+    suspend fun deleteRoute(route: Route) {
+        // Prvo obriši sve tačke rute
+        routeDao.deleteRoutePoints(route.id)
+        // Onda obriši rutu
+        routeDao.deleteRoute(route)
+    }
+
+    // DODATA METODA ZA BRISANJE RUTE PO ID
+    suspend fun deleteRouteById(routeId: String) {
+        routeDao.deleteRoutePoints(routeId)
+        routeDao.deleteRouteById(routeId)
+    }
 }

@@ -1,6 +1,7 @@
 package jovannedeljkovic.gps_tracker_ds.ui.auth
 
 import android.content.Intent
+import android.content.SharedPreferences
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.widget.Toast
@@ -64,6 +65,10 @@ class RegisterActivity : AppCompatActivity() {
 
                 runOnUiThread {
                     if (success) {
+                        // SAČUVAJTE KORISNIČKI EMAIL U SHARED PREFERENCES
+                        val sharedPreferences = getSharedPreferences("user_prefs", MODE_PRIVATE)
+                        sharedPreferences.edit().putString("user_email", email).apply()
+
                         Toast.makeText(
                             this@RegisterActivity,
                             "Uspešno ste se registrovali!",

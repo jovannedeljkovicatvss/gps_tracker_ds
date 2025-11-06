@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@android:color/white">
@@ -8,19 +9,25 @@
     <!-- MapView zauzima ceo ekran -->
     <org.osmdroid.views.MapView
         android:id="@+id/mapView"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
     <!-- Toolbar na vrhu -->
     <LinearLayout
         android:id="@+id/toolbar"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_alignParentTop="true"
         android:background="@drawable/toolbar_background"
         android:orientation="horizontal"
         android:padding="12dp"
-        android:elevation="8dp">
+        android:elevation="8dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
         <!-- Naslov -->
         <TextView
@@ -33,7 +40,7 @@
             android:textColor="@android:color/white"
             android:gravity="center" />
 
-        <!-- Meni ikonica - tri linije u desnom uglu -->
+        <!-- Meni ikonica -->
         <ImageButton
             android:id="@+id/btnMenu"
             android:layout_width="40dp"
@@ -45,18 +52,18 @@
 
     </LinearLayout>
 
-    <!-- Kontrolni panel - DESNA IVICA EKRANA, ISPOD TOOLBARA -->
+    <!-- Kontrolni panel - DESNA IVICA -->
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_alignParentEnd="true"
-        android:layout_below="@+id/toolbar"
         android:layout_marginTop="16dp"
         android:layout_marginEnd="8dp"
         android:orientation="vertical"
         android:padding="4dp"
         android:background="@drawable/panel_background"
-        android:elevation="8dp">
+        android:elevation="8dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/toolbar">
 
         <!-- Tracking Mode dugme -->
         <com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -77,6 +84,28 @@
             android:layout_marginBottom="8dp"
             android:src="@drawable/ic_my_location"
             android:contentDescription="Moja lokacija"
+            app:fabSize="mini"
+            app:tint="@android:color/white" />
+
+        <!-- Google Mape dugme -->
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/btnGoogleMaps"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginBottom="8dp"
+            android:src="@drawable/ic_google_maps"
+            android:contentDescription="Google Mape"
+            app:fabSize="mini"
+            app:tint="@android:color/white" />
+
+        <!-- Sačuvane rute dugme -->
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/btnSavedRoutes"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginBottom="8dp"
+            android:src="@drawable/ic_saved_routes"
+            android:contentDescription="Sačuvane rute"
             app:fabSize="mini"
             app:tint="@android:color/white" />
 
@@ -108,13 +137,15 @@
     <!-- Tracking Panel - dno ekrana -->
     <LinearLayout
         android:id="@+id/trackingPanel"
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
         android:background="@drawable/panel_background"
         android:orientation="vertical"
         android:padding="12dp"
-        android:elevation="8dp">
+        android:elevation="8dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
 
         <!-- Statistike -->
         <LinearLayout
@@ -187,10 +218,11 @@
         android:id="@+id/fabAddPoint"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_alignParentEnd="true"
-        android:layout_above="@+id/trackingPanel"
-        android:layout_margin="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
         android:src="@android:drawable/ic_input_add"
-        android:contentDescription="Dodaj tačku" />
+        android:contentDescription="Dodaj tačku"
+        app:layout_constraintBottom_toTopOf="@id/trackingPanel"
+        app:layout_constraintEnd_toEndOf="parent" />
 
-</RelativeLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

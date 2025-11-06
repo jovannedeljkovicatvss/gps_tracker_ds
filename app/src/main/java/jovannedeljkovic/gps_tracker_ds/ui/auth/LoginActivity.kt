@@ -1,6 +1,7 @@
 package jovannedeljkovic.gps_tracker_ds.ui.auth
 
 import android.content.Intent
+import android.content.SharedPreferences
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.widget.Toast
@@ -8,7 +9,7 @@ import androidx.lifecycle.lifecycleScope
 import jovannedeljkovic.gps_tracker_ds.App
 import jovannedeljkovic.gps_tracker_ds.utils.PasswordHasher
 import jovannedeljkovic.gps_tracker_ds.databinding.ActivityLoginBinding
-import jovannedeljkovic.gps_tracker_ds.ui.main.MainActivity  // DODAJ OVAJ IMPORT
+import jovannedeljkovic.gps_tracker_ds.ui.main.MainActivity
 import kotlinx.coroutines.launch
 
 class LoginActivity : AppCompatActivity() {
@@ -65,13 +66,17 @@ class LoginActivity : AppCompatActivity() {
 
                 runOnUiThread {
                     if (user != null) {
+                        // SAČUVAJTE KORISNIČKI EMAIL U SHARED PREFERENCES
+                        val sharedPreferences = getSharedPreferences("user_prefs", MODE_PRIVATE)
+                        sharedPreferences.edit().putString("user_email", email).apply()
+
                         Toast.makeText(
                             this@LoginActivity,
                             "Uspešno ste se prijavili!",
                             Toast.LENGTH_SHORT
                         ).show()
 
-                        // Prebaci na MainActivity - ISPRAVLJENO
+                        // Prebaci na MainActivity
                         startActivity(Intent(this@LoginActivity, MainActivity::class.java))
                         finish()
                     } else {

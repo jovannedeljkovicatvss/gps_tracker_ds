@@ -9,6 +9,7 @@ import android.location.Location
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -18,6 +19,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.location.*
 import jovannedeljkovic.gps_tracker_ds.App
@@ -121,7 +123,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initializeMap() {
-        map = binding.mapView
+        map = binding.mapView as org.osmdroid.views.MapView // Dodaj cast
         map.setTileSource(TileSourceFactory.MAPNIK)
         map.setMultiTouchControls(true)
 
@@ -209,12 +211,10 @@ class MainActivity : AppCompatActivity() {
             resetCurrentRoute()
         }
 
-        // DODATO: Saved Routes dugme
         binding.btnSavedRoutes.setOnClickListener {
             showSavedRoutes()
         }
 
-        // DODATO: Google Maps dugme
         binding.btnGoogleMaps.setOnClickListener {
             openGoogleMaps()
         }
@@ -949,10 +949,8 @@ class MainActivity : AppCompatActivity() {
         binding.btnExport.isEnabled = false
         binding.btnReset.isEnabled = false
 
-        val intent = Intent(this, TrackingService::class.java).apply {
-            action = "START_TRACKING"
-        }
-        startService(intent)
+
+
 
         Toast.makeText(this, "Snimanje rute započeto!", Toast.LENGTH_SHORT).show()
     }
@@ -965,10 +963,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnExport.isEnabled = true
         binding.btnReset.isEnabled = true
 
-        val intent = Intent(this, TrackingService::class.java).apply {
-            action = "STOP_TRACKING"
-        }
-        startService(intent)
+
 
         currentRoute?.let { route ->
             val duration = System.currentTimeMillis() - trackingStartTime
@@ -1025,8 +1020,22 @@ class MainActivity : AppCompatActivity() {
         binding.tvSpeed.text = "Brzina: ${String.format("%.1f", speed)} km/h"
     }
 
-    // POBOLJŠANA EXPORT FUNKCIJA - SA DETALJNOM LOKACIJOM
+    // NOVA EXPORT FUNKCIJA SA DOWNLOADS FOLDEROM
     private fun exportRouteData() {
+        val options = arrayOf("Izvezi rutu", "Izvezi tačke", "Otkaži")
+
+        AlertDialog.Builder(this)
+            .setTitle("Izvezi podatke")
+            .setItems(options) { dialog, which ->
+                when (which) {
+                    0 -> exportRouteToCSV()
+                    1 -> exportPointsToCSV()
+                }
+            }
+            .show()
+    }
+
+    private fun exportRouteToCSV() {
         if (currentRoute == null || routePoints.isEmpty()) {
             Toast.makeText(this, "Nema podataka za eksport!", Toast.LENGTH_SHORT).show()
             return
@@ -1037,16 +1046,13 @@ class MainActivity : AppCompatActivity() {
                 val app = application as App
                 val points = app.routeRepository.getRoutePoints(currentRoute!!.id)
 
-                // Kreiraj CSV fajl
+                // Koristimo Downloads folder
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                 val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                val fileName = "gps_tracker_${currentRoute!!.name.replace(" ", "_")}_$timestamp.csv"
-
-                // KORISTIMO OSNOVNI EXTERNAL FILES DIR - OVO JE SIGURNA LOKACIJA
-                val baseDir = getExternalFilesDir(null)
-                val file = File(baseDir, fileName)
+                val fileName = "gps_route_${timestamp}.csv"
+                val file = File(downloadsDir, fileName)
 
                 FileWriter(file).use { writer ->
-                    // Header
                     writer.append("Route: ${currentRoute!!.name}\n")
                     writer.append("Start Time: ${formatDate(currentRoute!!.startTime)}\n")
                     writer.append("Total Distance: ${formatDistance(currentRoute!!.distance)}\n")
@@ -1054,7 +1060,6 @@ class MainActivity : AppCompatActivity() {
                     writer.append("Exported: ${SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault()).format(Date())}\n")
                     writer.append("\n")
 
-                    // Podaci
                     writer.append("Point,Latitude,Longitude,Timestamp,Distance (m),Time\n")
 
                     var cumulativeDistance = 0.0
@@ -1075,45 +1080,13 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 runOnUiThread {
-                    val absolutePath = file.absolutePath
-
-                    // POKAŽI TAČNU LOKACIJU KORISNIKU
-                    val message = """
-                        ✅ EKSPORT ZAVRŠEN!
-                        
-                        📁 FAJL: $fileName
-                        📍 LOKACIJA: $absolutePath
-                        
-                        ℹ️ KAKO PRONAĆI FAJL:
-                        1. Otvorite 'File Manager' na telefonu
-                        2. Idite na 'Internal Storage'
-                        3. Pronađite: 'Android → data → jovannedeljkovic.gps_tracker_ds → files'
-                        4. Tu je vaš CSV fajl!
-                        
-                        💡 Kopirajte fajl na računar i otvorite ga u Excelu!
-                    """.trimIndent()
-
-                    AlertDialog.Builder(this@MainActivity)
-                        .setTitle("Eksport Uspešan! 🎉")
-                        .setMessage(message)
-                        .setPositiveButton("OK") { dialog, _ -> }
-                        .setNeutralButton("Podeli fajl") { dialog, which ->
-                            shareFile(file)
-                        }
-                        .show()
-
-                    // Takođe pokaži u Toastu gde je fajl
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Fajl sačuvan: $absolutePath",
-                        Toast.LENGTH_LONG
-                    ).show()
+                    showExportSuccessDialog(file, "ruta")
                 }
             } catch (e: Exception) {
                 runOnUiThread {
                     Toast.makeText(
                         this@MainActivity,
-                        "Greška pri eksportu: ${e.message}",
+                        "Greška pri eksportu rute: ${e.message}",
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -1121,15 +1094,105 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // DODAJTE OVU FUNKCIJU ZA DELJENJE FAJLA
+    private fun exportPointsToCSV() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val app = application as App
+                val points = app.pointRepository.getUserPoints("current-user")
+
+                if (points.isEmpty()) {
+                    runOnUiThread {
+                        Toast.makeText(this@MainActivity, "Nema tačaka za eksport!", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+
+                // Koristimo Downloads folder
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                val fileName = "gps_points_${timestamp}.csv"
+                val file = File(downloadsDir, fileName)
+
+                FileWriter(file).use { writer ->
+                    writer.append("Points Export\n")
+                    writer.append("Total Points: ${points.size}\n")
+                    writer.append("Exported: ${SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault()).format(Date())}\n")
+                    writer.append("\n")
+
+                    writer.append("Name,Latitude,Longitude,Created At\n")
+
+                    points.forEachIndexed { index, point ->
+                        val pointTime = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault()).format(Date(point.createdAt))
+                        writer.append("\"${point.name}\",${point.latitude},${point.longitude},\"$pointTime\"\n")
+                    }
+                }
+
+                runOnUiThread {
+                    showExportSuccessDialog(file, "tačke")
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Greška pri eksportu tačaka: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun showExportSuccessDialog(file: File, type: String) {
+        val absolutePath = file.absolutePath
+
+        val message = """
+            ✅ EKSPORT ZAVRŠEN!
+            
+            📁 FAJL: ${file.name}
+            📍 LOKACIJA: $absolutePath
+            📊 TIP: $type
+            
+            ℹ️ KAKO PRONAĆI FAJL:
+            1. Otvorite 'File Manager' na telefonu
+            2. Idite na 'Downloads' folder
+            3. Tu je vaš CSV fajl!
+            
+            💡 Kopirajte fajl na računar i otvorite ga u Excelu!
+        """.trimIndent()
+
+        AlertDialog.Builder(this@MainActivity)
+            .setTitle("Eksport Uspešan! 🎉")
+            .setMessage(message)
+            .setPositiveButton("OK") { dialog, _ -> }
+            .setNeutralButton("Podeli fajl") { dialog, which ->
+                shareFile(file)
+            }
+            .show()
+
+        Toast.makeText(
+            this@MainActivity,
+            "${type.capitalize()} sačuvane u Downloads: ${file.name}",
+            Toast.LENGTH_LONG
+        ).show()
+    }
+
+    // POBOLJŠANA FUNKCIJA ZA DELJENJE FAJLA
     private fun shareFile(file: File) {
         try {
-            val uri = Uri.fromFile(file)
-            val intent = Intent(Intent.ACTION_SEND)
-            intent.type = "text/csv"
-            intent.putExtra(Intent.EXTRA_STREAM, uri)
-            intent.putExtra(Intent.EXTRA_SUBJECT, "GPS Tracker Export")
-            intent.putExtra(Intent.EXTRA_TEXT, "Eksportovana ruta iz GPS Tracker aplikacije")
+            // Koristimo FileProvider za bezbedno deljenje
+            val uri = FileProvider.getUriForFile(
+                this,
+                "${packageName}.provider",
+                file
+            )
+
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/csv"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, "GPS Tracker Export")
+                putExtra(Intent.EXTRA_TEXT, "Eksportovani podaci iz GPS Tracker aplikacije")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
 
             startActivity(Intent.createChooser(intent, "Podeli CSV fajl"))
         } catch (e: Exception) {

@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">GPS Tracker</string>
+    <string name="maplibre_access_token">your_token_here</string>
 </resources>

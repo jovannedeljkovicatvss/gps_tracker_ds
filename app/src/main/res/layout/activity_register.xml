@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:padding="24dp"
-    android:background="@android:color/white">
+    android:background="@color/blue_light_background">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -18,7 +18,7 @@
             android:text="Registracija"
             android:textSize="28sp"
             android:textStyle="bold"
-            android:textColor="@android:color/black"
+            android:textColor="@color/blue_dark"
             android:gravity="center"
             android:layout_marginBottom="32dp"
             android:layout_marginTop="20dp" />
@@ -32,7 +32,8 @@
             app:boxCornerRadiusBottomEnd="12dp"
             app:boxCornerRadiusBottomStart="12dp"
             app:boxCornerRadiusTopEnd="12dp"
-            app:boxCornerRadiusTopStart="12dp">
+            app:boxCornerRadiusTopStart="12dp"
+            app:boxBackgroundColor="@android:color/white">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/etName"
@@ -52,7 +53,8 @@
             app:boxCornerRadiusBottomEnd="12dp"
             app:boxCornerRadiusBottomStart="12dp"
             app:boxCornerRadiusTopEnd="12dp"
-            app:boxCornerRadiusTopStart="12dp">
+            app:boxCornerRadiusTopStart="12dp"
+            app:boxBackgroundColor="@android:color/white">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/etEmail"
@@ -72,7 +74,8 @@
             app:boxCornerRadiusBottomEnd="12dp"
             app:boxCornerRadiusBottomStart="12dp"
             app:boxCornerRadiusTopEnd="12dp"
-            app:boxCornerRadiusTopStart="12dp">
+            app:boxCornerRadiusTopStart="12dp"
+            app:boxBackgroundColor="@android:color/white">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/etPhone"
@@ -92,7 +95,8 @@
             app:boxCornerRadiusBottomEnd="12dp"
             app:boxCornerRadiusBottomStart="12dp"
             app:boxCornerRadiusTopEnd="12dp"
-            app:boxCornerRadiusTopStart="12dp">
+            app:boxCornerRadiusTopStart="12dp"
+            app:boxBackgroundColor="@android:color/white">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/etPassword"
@@ -112,7 +116,8 @@
             app:boxCornerRadiusBottomEnd="12dp"
             app:boxCornerRadiusBottomStart="12dp"
             app:boxCornerRadiusTopEnd="12dp"
-            app:boxCornerRadiusTopStart="12dp">
+            app:boxCornerRadiusTopStart="12dp"
+            app:boxBackgroundColor="@android:color/white">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/etConfirmPassword"
@@ -123,7 +128,7 @@
 
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Registracija dugme - PROMENJENO NA OBIČAN BUTTON -->
+        <!-- Registracija dugme - PLAVA -->
         <Button
             android:id="@+id/btnRegister"
             android:layout_width="match_parent"
@@ -131,7 +136,7 @@
             android:text="Registruj se"
             android:textSize="16sp"
             android:textStyle="bold"
-            android:background="@color/purple_500"
+            android:background="@drawable/button_blue_rounded"
             android:textColor="@android:color/white"
             android:layout_marginBottom="24dp" />
 
@@ -143,7 +148,7 @@
             android:text="Već imate nalog? Prijavite se"
             android:textSize="14sp"
             android:gravity="center"
-            android:textColor="@color/purple_500"
+            android:textColor="@color/blue_dark"
             android:clickable="true"
             android:focusable="true" />
 

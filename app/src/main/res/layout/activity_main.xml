@@ -16,12 +16,12 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- Toolbar na vrhu -->
+    <!-- Toolbar na vrhu - PLAVA POZADINA -->
     <LinearLayout
         android:id="@+id/toolbar"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:background="@drawable/toolbar_background"
+        android:background="@color/blue_primary"
         android:orientation="horizontal"
         android:padding="12dp"
         android:elevation="8dp"
@@ -52,7 +52,7 @@
 
     </LinearLayout>
 
-    <!-- Kontrolni panel - DESNA IVICA -->
+    <!-- Kontrolni panel - DESNA IVICA - BELA POZADINA -->
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -60,12 +60,12 @@
         android:layout_marginEnd="8dp"
         android:orientation="vertical"
         android:padding="4dp"
-        android:background="@drawable/panel_background"
+        android:background="@drawable/panel_background_white"
         android:elevation="8dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@id/toolbar">
 
-        <!-- Tracking Mode dugme -->
+        <!-- Tracking Mode dugme - PLAVA BOJA -->
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/btnTrackingMode"
             android:layout_width="40dp"
@@ -73,10 +73,11 @@
             android:layout_marginBottom="8dp"
             android:src="@drawable/ic_tracking_mode"
             android:contentDescription="Režim praćenja"
+            app:backgroundTint="@color/blue_primary"
             app:fabSize="mini"
             app:tint="@android:color/white" />
 
-        <!-- Moja lokacija dugme -->
+        <!-- Moja lokacija dugme - PLAVA BOJA -->
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/btnMyLocation"
             android:layout_width="40dp"
@@ -84,10 +85,11 @@
             android:layout_marginBottom="8dp"
             android:src="@drawable/ic_my_location"
             android:contentDescription="Moja lokacija"
+            app:backgroundTint="@color/blue_primary"
             app:fabSize="mini"
             app:tint="@android:color/white" />
 
-        <!-- Google Mape dugme -->
+        <!-- Google Mape dugme - PLAVA BOJA -->
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/btnGoogleMaps"
             android:layout_width="40dp"
@@ -95,10 +97,11 @@
             android:layout_marginBottom="8dp"
             android:src="@drawable/ic_google_maps"
             android:contentDescription="Google Mape"
+            app:backgroundTint="@color/blue_primary"
             app:fabSize="mini"
             app:tint="@android:color/white" />
 
-        <!-- Sačuvane rute dugme -->
+        <!-- Sačuvane rute dugme - PLAVA BOJA -->
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/btnSavedRoutes"
             android:layout_width="40dp"
@@ -106,10 +109,11 @@
             android:layout_marginBottom="8dp"
             android:src="@drawable/ic_saved_routes"
             android:contentDescription="Sačuvane rute"
+            app:backgroundTint="@color/blue_primary"
             app:fabSize="mini"
             app:tint="@android:color/white" />
 
-        <!-- Export dugme -->
+        <!-- Export dugme - PLAVA BOJA -->
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/btnExport"
             android:layout_width="40dp"
@@ -117,29 +121,31 @@
             android:layout_marginBottom="8dp"
             android:src="@drawable/ic_export"
             android:contentDescription="Export"
+            app:backgroundTint="@color/blue_primary"
             app:fabSize="mini"
             app:tint="@android:color/white"
             android:enabled="false" />
 
-        <!-- Reset dugme -->
+        <!-- Reset dugme - PLAVA BOJA -->
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/btnReset"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:src="@drawable/ic_reset"
             android:contentDescription="Reset"
+            app:backgroundTint="@color/blue_primary"
             app:fabSize="mini"
             app:tint="@android:color/white"
             android:enabled="false" />
 
     </LinearLayout>
 
-    <!-- Tracking Panel - dno ekrana -->
+    <!-- Tracking Panel - dno ekrana - BELA POZADINA -->
     <LinearLayout
         android:id="@+id/trackingPanel"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:background="@drawable/panel_background"
+        android:background="@drawable/panel_background_white"
         android:orientation="vertical"
         android:padding="12dp"
         android:elevation="8dp"
@@ -147,7 +153,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
-        <!-- Statistike -->
+        <!-- Statistike - PLAVI TEKST -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -162,7 +168,7 @@
                 android:text="Udaljenost: 0.0 m"
                 android:textSize="12sp"
                 android:textStyle="bold"
-                android:textColor="@android:color/white"
+                android:textColor="@color/blue_dark"
                 android:gravity="center" />
 
             <TextView
@@ -173,7 +179,7 @@
                 android:text="Brzina: 0.0 km/h"
                 android:textSize="12sp"
                 android:textStyle="bold"
-                android:textColor="@android:color/white"
+                android:textColor="@color/blue_dark"
                 android:gravity="center" />
 
         </LinearLayout>
@@ -184,6 +190,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal">
 
+            <!-- START dugme - PLAVA -->
             <Button
                 android:id="@+id/btnStartTracking"
                 android:layout_width="0dp"
@@ -192,10 +199,11 @@
                 android:text="START"
                 android:textSize="14sp"
                 android:textStyle="bold"
-                android:background="@drawable/button_green"
+                android:background="@drawable/button_blue_rounded"
                 android:textColor="@android:color/white"
                 android:layout_marginEnd="6dp" />
 
+            <!-- STOP dugme - SIVO (kad nije aktivan) -->
             <Button
                 android:id="@+id/btnStopTracking"
                 android:layout_width="0dp"
@@ -213,7 +221,7 @@
 
     </LinearLayout>
 
-    <!-- Floating Action Button za dodavanje tačaka -->
+    <!-- Floating Action Button za dodavanje tačaka - PLAVA BOJA -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabAddPoint"
         android:layout_width="wrap_content"
@@ -222,6 +230,8 @@
         android:layout_marginBottom="16dp"
         android:src="@android:drawable/ic_input_add"
         android:contentDescription="Dodaj tačku"
+        app:backgroundTint="@color/blue_primary"
+        app:tint="@android:color/white"
         app:layout_constraintBottom_toTopOf="@id/trackingPanel"
         app:layout_constraintEnd_toEndOf="parent" />
 

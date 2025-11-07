@@ -7,4 +7,14 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- Nove boje za plavu temu -->
+    <color name="blue_primary">#FF2196F3</color>
+    <color name="blue_light">#FF64B5F6</color>
+    <color name="blue_dark">#FF1976D2</color>
+    <color name="blue_light_background">#FFE3F2FD</color>
+    <color name="green_active">#FF4CAF50</color>
+    <color name="red_active">#FFF44336</color>
+    <color name="background_white">#FFFFFFFF</color>
+    <color name="card_white">#F5FFFFFF</color>
 </resources>

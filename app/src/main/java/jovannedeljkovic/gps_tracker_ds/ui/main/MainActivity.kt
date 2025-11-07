@@ -384,10 +384,10 @@ class MainActivity : AppCompatActivity() {
             
             👤 Korisnik: ${getUserName()}
             🔋 Baterija: ${batteryLevel}%
-            🕐 Vreme: ${SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault()).format(Date())}
-            🚗 Brzina: ${String.format("%.1f", currentSpeed)} km/h
+            🕒 Vreme: ${SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault()).format(Date())}
+            🚀 Brzina: ${String.format("%.1f", currentSpeed)} km/h
             🧭 Smer: $direction (${currentBearing.toInt()}°)
-            🏔️ Visina: ${String.format("%.0f", currentAltitude)} m
+            ⛰️ Visina: ${String.format("%.0f", currentAltitude)} m
             ⏱️ Stajanje: $stationaryTime
             📍 Koordinate: 
                ${String.format("%.6f", myLocationMarker?.position?.latitude)}, 
@@ -609,7 +609,7 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "📍 Režim dodavanja tačaka - klikni na mapu", Toast.LENGTH_SHORT).show()
         } else {
             binding.fabAddPoint.setImageResource(android.R.drawable.ic_input_add)
-            binding.fabAddPoint.backgroundTintList = ContextCompat.getColorStateList(this, android.R.color.holo_blue_light)
+            binding.fabAddPoint.backgroundTintList = ContextCompat.getColorStateList(this, R.color.blue_primary)
             Toast.makeText(this, "Režim dodavanja tačaka isključen", Toast.LENGTH_SHORT).show()
         }
     }
@@ -718,7 +718,7 @@ class MainActivity : AppCompatActivity() {
         val message = """
             📍 ${point.name}
             
-            🌐 Koordinate:
+            📍 Koordinate:
             Lat: ${String.format("%.6f", point.latitude)}
             Lng: ${String.format("%.6f", point.longitude)}
             
@@ -1079,12 +1079,12 @@ class MainActivity : AppCompatActivity() {
 
                     // POKAŽI TAČNU LOKACIJU KORISNIKU
                     val message = """
-                        📊 EKSPORT ZAVRŠEN!
+                        ✅ EKSPORT ZAVRŠEN!
                         
                         📁 FAJL: $fileName
                         📍 LOKACIJA: $absolutePath
                         
-                        🔍 KAKO PRONAĆI FAJL:
+                        ℹ️ KAKO PRONAĆI FAJL:
                         1. Otvorite 'File Manager' na telefonu
                         2. Idite na 'Internal Storage'
                         3. Pronađite: 'Android → data → jovannedeljkovic.gps_tracker_ds → files'
@@ -1094,7 +1094,7 @@ class MainActivity : AppCompatActivity() {
                     """.trimIndent()
 
                     AlertDialog.Builder(this@MainActivity)
-                        .setTitle("Eksport Uspešan! ✅")
+                        .setTitle("Eksport Uspešan! 🎉")
                         .setMessage(message)
                         .setPositiveButton("OK") { dialog, _ -> }
                         .setNeutralButton("Podeli fajl") { dialog, which ->

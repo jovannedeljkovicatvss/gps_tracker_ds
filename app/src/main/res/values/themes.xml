@@ -1,0 +1,8 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Base.Theme.GPSTrackerDS" parent="Theme.Material3.DayNight">
+        <!-- Customize your theme here. -->
+    </style>
+
+    <style name="Theme.GPSTrackerDS" parent="Base.Theme.GPSTrackerDS" />
+</resources>

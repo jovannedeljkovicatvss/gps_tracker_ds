@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">GPS Tracker PRO</string>
+    <string name="maplibre_access_token">your_token_here</string>
+    <string name="time_label">VREME</string>
+    <string name="distance_label">UDALJENOST</string>
+    <string name="speed_label">BRZINA</string>
+    <string name="searching_gps">Tražim GPS signal...</string>
+</resources>

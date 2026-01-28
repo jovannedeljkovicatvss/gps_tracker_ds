@@ -1,0 +1,102 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'kotlin-kapt'
+}
+
+android {
+    compileSdk 34
+    namespace 'jovannedeljkovic.gps_tracker_pro'
+
+    defaultConfig {
+        applicationId "jovannedeljkovic.gps_tracker_pro"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+    kapt {
+        correctErrorTypes = true
+    }
+
+    buildFeatures {
+        viewBinding true
+    }
+}
+
+dependencies {
+    // OpenStreetMap - POTPUNO BESPLATNO
+    implementation 'org.osmdroid:osmdroid-android:6.1.17'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4'
+
+    // Android osnove
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.10.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'com.squareup.okhttp3:okhttp:4.11.0'
+    // Location services
+    implementation 'com.google.android.gms:play-services-location:21.0.1'
+    // OSM Offline maps - PRAVE biblioteke
+    implementation 'com.google.code.gson:gson:2.10.1'
+
+    // Room Database
+    implementation 'androidx.room:room-runtime:2.6.0'
+    implementation 'androidx.room:room-ktx:2.6.0'
+    kapt 'androidx.room:room-compiler:2.6.0'
+
+    // Lifecycle
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0'
+    implementation 'androidx.lifecycle:lifecycle-livedata-ktx:2.7.0'
+    // Room Database (ako koristiš)
+    def room_version = "2.6.1"
+    implementation "androidx.room:room-runtime:$room_version"
+    implementation "androidx.room:room-ktx:$room_version"
+    kapt "androidx.room:room-compiler:$room_version"
+
+    kapt "androidx.room:room-compiler:2.6.0"
+
+    // Lifecycle components
+    def lifecycle_version = "2.7.0"
+    implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:$lifecycle_version"
+    implementation "androidx.lifecycle:lifecycle-livedata-ktx:$lifecycle_version"
+    implementation "androidx.lifecycle:lifecycle-common-java8:$lifecycle_version"
+
+    // Kotlin Coroutines
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+
+    // OSMDroid za mapu
+    implementation 'org.osmdroid:osmdroid-android:6.1.18'
+
+    // Google Location Services
+    implementation 'com.google.android.gms:play-services-location:21.0.1'
+
+    // HTTP klijent (OkHttp)
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // JSON parsing (Gson)
+    implementation 'com.google.code.gson:gson:2.10.1'
+
+    // Material Design
+    implementation 'com.google.android.material:material:1.11.0'
+
+    implementation 'com.squareup.retrofit2:retrofit:2.9.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
+    implementation 'com.squareup.okhttp3:logging-interceptor:4.9.3'
+}

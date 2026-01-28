@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark Blue Theme (iCar GPS Style) -->
+    <color name="primary_dark">#FF1565C0</color>      <!-- Tamno plava -->
+    <color name="primary_darker">#FF0D47A1</color>    <!-- Tamnija plava -->
+    <color name="primary_medium">#FF1976D2</color>    <!-- Srednje plava -->
+    <color name="accent_green">#FF4CAF50</color>
+    <color name="accent_red">#FFF44336</color>
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#FFB3E5FC</color>    <!-- Svetlo plava -->
+    <color name="card_dark">#FF1E88E5</color>         <!-- Plava za kartice -->
+
+    <!-- Transparent Colors -->
+    <color name="transparent_dark">#801E88E5</color>  <!-- Polu-transparentno plava -->
+
+    <!-- Original Colors (za kompatibilnost) -->
+    <color name="blue_primary">#FF2196F3</color>
+    <color name="blue_dark">#FF1976D2</color>
+    <color name="blue_light">#FFBBDEFB</color>
+    <color name="blue_light_background">#FFE3F2FD</color>
+    <color name="blue_very_light">#FFE1F5FE</color>
+    <color name="green">#FF4CAF50</color>
+    <color name="red">#FFF44336</color>
+    <color name="orange">#FFFF9800</color>
+    <color name="purple">#FF9C27B0</color>
+    <color name="yellow">#FFFFEB3B</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="gray">#FF9E9E9E</color>
+    <color name="gray_dark">#FF424242</color>
+    <color name="gray_light">#FFEEEEEE</color>
+    <color name="green_active">#FF4CAF50</color>
+    <color name="transparent">#00000000</color>
+    <color name="semi_transparent_white">#80FFFFFF</color>
+    <color name="semi_transparent_black">#80000000</color>
+    <color name="card_light">#FFFFFFFF</color>
+    <color name="primary_blue">#3498DB</color>
+    <color name="modern_dark_blue">#FF1E2E3E</color>
+    <color name="accent_orange">#FFFF9800</color>
+    <color name="transparent_white">#88FFFFFF</color>
+
+</resources>

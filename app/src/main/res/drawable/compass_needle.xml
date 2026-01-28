@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="40dp"
+    android:height="40dp"
+    android:viewportWidth="40"
+    android:viewportHeight="40">
+
+    <!-- Crvena igla -->
+    <path
+        android:fillColor="#FFFF5252"
+        android:pathData="M20,2 L24,38 L20,32 L16,38 Z"/>
+
+    <!-- Centar igle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M20,20 m -3,0 a 3,3 0 1,1 6,0 a 3,3 0 1,1 -6,0"/>
+
+</vector>

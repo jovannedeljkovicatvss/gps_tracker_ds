@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="60dp"
+    android:height="60dp"
+    android:viewportWidth="60"
+    android:viewportHeight="60">
+
+    <!-- Krug - ISPRAVLJEN FORMAT -->
+    <path
+        android:strokeWidth="2"
+        android:strokeColor="#80FFFFFF"
+        android:fillColor="#E6101E2E"
+        android:pathData="M30,30 m -28,0 a 28,28 0 1,1 56,0 a 28,28 0 1,1 -56,0"/>
+
+    <!-- Strelica za sever -->
+    <path
+        android:strokeWidth="2"
+        android:strokeColor="#FF4CAF50"
+        android:pathData="M30,5 L30,15 M27,12 L30,5 L33,12"/>
+
+</vector>

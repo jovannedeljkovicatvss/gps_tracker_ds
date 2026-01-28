@@ -1,0 +1,4 @@
+<resources>
+    <!-- Dodajte ovo ako već ne postoji -->
+    <dimen name="tracking_dialog_margin_top">100dp</dimen>
+</resources>

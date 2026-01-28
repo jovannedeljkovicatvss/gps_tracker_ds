@@ -51,6 +51,16 @@ class UserRepository(private val userDao: UserDao) {
         return userDao.getUserById(userId)
     }
 
+    suspend fun deleteUser(userId: String): Boolean {
+        return try {
+            // Za sada samo obrišite korisnika iz baze
+            // U budućnosti dodajte brisanje ruta i tačaka
+            userDao.deleteUserById(userId)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
     suspend fun upgradeToPremium(userId: String, days: Int = 30): Boolean {
         return try {
             val expiry = System.currentTimeMillis() + (days * 24 * 60 * 60 * 1000L)

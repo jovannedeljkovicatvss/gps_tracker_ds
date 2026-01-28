@@ -1,63 +1,116 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp"
-    android:background="@color/primary_dark">
+    android:background="@color/primary_dark"
+    android:padding="8dp">
 
-    <!-- Header -->
+    <!-- Toolbar sa akcijama -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@color/primary_dark"
+        android:minHeight="?attr/actionBarSize"
+        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
+        app:titleTextColor="@color/white">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:paddingHorizontal="8dp">
+
+            <!-- Nazad dugme -->
+            <Button
+                android:id="@+id/btnBack"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentStart="true"
+                android:layout_centerVertical="true"
+                android:background="@drawable/button_dark_blue"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="8dp"
+                android:text="⬅"
+                android:textColor="@color/white"
+                android:textSize="16sp" />
+
+            <!-- Naslov -->
+            <TextView
+                android:id="@+id/tvTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerInParent="true"
+                android:text="👑 Admin Panel"
+                android:textColor="@color/white"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <!-- Refresh dugme -->
+            <Button
+                android:id="@+id/btnRefresh"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:background="@drawable/button_dark_blue"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="8dp"
+                android:text="🔄"
+                android:textColor="@color/white"
+                android:textSize="16sp" />
+
+        </RelativeLayout>
+    </com.google.android.material.appbar.MaterialToolbar>
+
+    <!-- Statistika dugme ispod toolbara -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="16dp">
+        android:gravity="center"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="16dp"
+        android:paddingHorizontal="16dp">
 
         <Button
-            android:id="@+id/btnBack"
+            android:id="@+id/btnStatistics"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="⬅ Nazad"
+            android:layout_marginEnd="8dp"
             android:background="@drawable/button_dark_blue"
-            android:textColor="@color/white" />
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="12dp"
+            android:text="📊 Statistika"
+            android:textColor="@color/white"
+            android:textSize="14sp" />
 
         <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="👑 Admin Panel"
-            android:textSize="20sp"
-            android:textColor="@color/white"
-            android:gravity="center"
-            android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/btnRefresh"
+            android:id="@+id/tvUserCount"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="🔄"
-            android:background="@drawable/button_dark_blue"
-            android:textColor="@color/white" />
+            android:background="@drawable/rounded_bg_blue"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="12dp"
+            android:text="👥 0 korisnika"
+            android:textColor="@color/white"
+            android:textSize="14sp" />
 
     </LinearLayout>
-
-    <!-- User Count -->
-    <TextView
-        android:id="@+id/tvUserCount"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Ukupno korisnika: 0"
-        android:textColor="@color/white"
-        android:textSize="16sp"
-        android:layout_marginBottom="16dp"
-        android:gravity="center" />
 
     <!-- Users List -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvUsers"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_weight="1"
+        android:layout_marginTop="8dp"
+        android:background="@color/white"
+        android:padding="4dp" />
 
 </LinearLayout>

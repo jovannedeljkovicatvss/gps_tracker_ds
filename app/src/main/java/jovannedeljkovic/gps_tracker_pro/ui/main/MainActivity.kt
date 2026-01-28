@@ -102,6 +102,10 @@ import java.nio.charset.Charset // DODAJ OVO
 import android.content.ContentUris
 import android.provider.MediaStore
 
+import com.google.gson.reflect.TypeToken
+import org.json.JSONObject
+import java.lang.reflect.Type
+
 
 data class GpxFileInfo(
     val id: Long,
@@ -716,10 +720,198 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun importBackupData(uri: Uri) {
-        // Ovo je kompleksnija funkcionalnost - možete je implementirati kasnije
-        Toast.makeText(this, "🔧 Funkcionalnost za backup u izradi...", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "📂 Funkcionalnost za backup u izradi...", Toast.LENGTH_LONG).show()
+
+        // Za sada samo prikažite poruku
+        AlertDialog.Builder(this)
+            .setTitle("🔄 Uvoz Backup Podataka")
+            .setMessage("Ova funkcionalnost će biti dostupna u narednoj verziji aplikacije.\n\n" +
+                    "Planirane mogućnosti:\n" +
+                    "• Uvoz ruta iz GPX/JSON\n" +
+                    "• Uvoz tačaka interesa\n" +
+                    "• Restauracija celokupnih podataka")
+            .setPositiveButton("OK", null)
+            .show()
     }
 
+    private fun showBackupImportDialog(jsonObject: JSONObject) {
+        val backupInfo = """
+        📊 Podaci u backup fajlu:
+        
+        📅 Datum backup-a: ${jsonObject.optString("backupDate", "Nepoznato")}
+        📱 Verzija aplikacije: ${jsonObject.optString("appVersion", "Nepoznato")}
+        
+        Izaberite šta želite da uvezete:
+    """.trimIndent()
+
+        AlertDialog.Builder(this)
+            .setTitle("📂 Opcije uvoza backup-a")
+            .setMessage(backupInfo)
+            .setPositiveButton("🗺️ Samo moje rute i tačke") { dialog, which ->
+                importUserDataFromBackup(jsonObject)
+            }
+            .setNegativeButton("❌ Otkaži", null)
+            .show()
+    }
+    private fun importUserDataFromBackup(jsonObject: JSONObject) {
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("🔄 Uvoz podataka...")
+            .setMessage("Uvozim rute i tačke...")
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val app = application as App
+                val gson = Gson()
+
+                // Uvezi rute
+                if (jsonObject.has("routes")) {
+                    val routesJson = jsonObject.getJSONArray("routes").toString()
+                    val routesType: Type = object : TypeToken<List<Route>>() {}.type
+                    val routes: List<Route> = gson.fromJson(routesJson, routesType)
+
+                    routes.forEach { route ->
+                        // Ažuriraj userId na trenutnog korisnika
+                        val updatedRoute = route.copy(userId = getCurrentUserId())
+                        app.routeRepository.createRoute(updatedRoute)
+                    }
+                }
+
+                // Uvezi tačke
+                if (jsonObject.has("points")) {
+                    val pointsJson = jsonObject.getJSONArray("points").toString()
+                    val pointsType: Type = object : TypeToken<List<PointOfInterest>>() {}.type
+                    val points: List<PointOfInterest> = gson.fromJson(pointsJson, pointsType)
+
+                    points.forEach { point ->
+                        // Ažuriraj userId na trenutnog korisnika
+                        val updatedPoint = point.copy(userId = getCurrentUserId())
+                        app.pointRepository.addPoint(updatedPoint)
+                    }
+                }
+
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(
+                        this@MainActivity,
+                        "✅ Podaci uspešno uvezeni!",
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                    // Osveži prikaz
+                    loadPointsOfInterest()
+                    loadSavedRoutes()
+                    refreshMapAndRoute()
+                }
+
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(
+                        this@MainActivity,
+                        "❌ Greška pri uvozu: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+    private fun showBackupImportOptions(backupData: BackupData) {
+        val message = """
+        📊 Pronađeni podaci u backup-u:
+        
+        👥 Korisnici: ${backupData.users.size}
+        🗺️ Rute: ${backupData.routes.size}
+        📍 Tačke: ${backupData.points.size}
+        📅 Datum backup-a: ${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(backupData.backupDate))}
+        📱 Verzija aplikacije: ${backupData.appVersion}
+        
+        ⚠️ Pažnja: Ovim ćete zameniti trenutne podatke!
+        
+        Izaberite opciju uvoza:
+    """.trimIndent()
+
+        AlertDialog.Builder(this)
+            .setTitle("📂 Opcije uvoza backup-a")
+            .setMessage(message)
+            .setPositiveButton("✅ Uvezi SVE podatke") { dialog, which ->
+                importAllBackupData(backupData)
+            }
+            /*.setNeutralButton("👥 Samo korisnike") { dialog, which ->
+                importUsersFromBackup(backupData.users)
+            }*/
+            .setNegativeButton("❌ Otkaži", null)
+            .show()
+    }
+
+    // Dodajte BackupData klase:
+    data class BackupData(
+        val users: List<User>,
+        val routes: List<Route>,
+        val points: List<PointOfInterest>,
+        val backupDate: Long,
+        val appVersion: String
+    )
+
+
+    private fun importAllBackupData(backupData: BackupData) {
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("🔄 Uvoz svih podataka...")
+            .setMessage("Molimo sačekajte...")
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val app = application as App
+
+                // 1. Obriši sve postojeće podatke
+                val currentUserId = getCurrentUserId()
+
+                // 2. Uvezi korisnike
+                backupData.users.forEach { user ->
+                    app.userRepository.registerUser(user)
+                }
+
+                // 3. Uvezi rute
+                backupData.routes.forEach { route ->
+                    app.routeRepository.createRoute(route)
+                }
+
+                // 4. Uvezi tačke
+                backupData.points.forEach { point ->
+                    app.pointRepository.addPoint(point)
+                }
+
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(
+                        this@MainActivity,
+                        "✅ Uspešno uvezeno ${backupData.users.size} korisnika, ${backupData.routes.size} ruta i ${backupData.points.size} tačaka!",
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                    // Osveži prikaz
+                    loadPointsOfInterest()
+                    loadSavedRoutes()
+                    refreshMapAndRoute()
+                }
+
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(
+                        this@MainActivity,
+                        "❌ Greška pri uvozu: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
     private fun showDeleteAllDataDialog() {
         AlertDialog.Builder(this)
             .setTitle("⚠️ Brisanje svih podataka")

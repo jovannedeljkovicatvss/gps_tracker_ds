@@ -6,6 +6,7 @@ import android.content.ClipData
 import android.location.Location
 import androidx.annotation.RequiresApi
 import kotlin.math.*
+
 import com.google.android.material.button.MaterialButton
 import org.osmdroid.tileprovider.MapTileProviderBase
 import org.osmdroid.util.MapTileIndex
@@ -101,7 +102,7 @@ import android.content.ActivityNotFoundException // DODAJ OVO
 import java.nio.charset.Charset // DODAJ OVO
 import android.content.ContentUris
 import android.provider.MediaStore
-
+import android.text.InputType
 import com.google.gson.reflect.TypeToken
 import org.json.JSONObject
 import java.lang.reflect.Type
@@ -1633,6 +1634,75 @@ private fun checkButtonAvailability() {
             false
         }
     }
+
+    /*private fun deleteUserWithAllData(user: User) {
+        AlertDialog.Builder(this)
+            .setTitle("🗑️ Brisanje korisnika")
+            .setMessage("Da li ste sigurni da želite da obrišete korisnika ${user.email}?\n\n" +
+                    "Ova akcija će obrisati:\n" +
+                    "📊 Sve rute korisnika\n" +
+                    "📍 Sve tačke interesa\n" +
+                    "👤 Korisnički nalog\n\n" +
+                    "⚠️ Ova akcija se NE MOŽE poništiti!")
+            .setPositiveButton("🗑️ Obriši") { dialog, which ->
+                performUserDeletion(user)
+            }
+            .setNegativeButton("❌ Otkaži", null)
+            .show()
+    }
+
+    private fun performUserDeletion(user: User) {
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("🔄 Brisanje u toku...")
+            .setMessage("Brišem korisnika i sve podatke...")
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val app = application as App
+
+                // 1. Obriši sve rute korisnika
+                val userRoutes = app.routeRepository.getUserRoutes(user.id)
+                userRoutes.forEach { route ->
+                    // Prvo obriši sve tačke rute
+                    app.routeRepository.deleteRoutePoints(route.id)
+                    // Onda obriši rutu
+                    app.routeRepository.deleteRoute(route)
+                }
+
+                // 2. Obriši sve tačke interesa
+                val userPoints = app.pointRepository.getUserPoints(user.id)
+                userPoints.forEach { point ->
+                    app.pointRepository.deletePoint(point)
+                }
+
+                // 3. Obriši korisnika
+                app.userRepository.deleteUser(user.id)
+
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(
+                        this@AdminActivity,  // ✅ ISPRAVNO: Dodajte @
+                        "✅ Korisnik ${user.email} uspešno obrisan sa svim podacima!",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    loadUsers() // Osveži listu
+                }
+
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(
+                        this@AdminActivity,
+                        "❌ Greška pri brisanju: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }*/
     private fun showNavigationMenu() {
         val options = arrayOf(
             "🗺️ Offline Mape",
@@ -1653,11 +1723,41 @@ private fun checkButtonAvailability() {
                     2 -> toggleCompass()
                     3 -> toggleTrackingMode()
                     4 -> showSettings()
-                    5 -> openAdminPanel()
+                    5 -> showAdminLoginDialog()
                     6 -> logout()
                 }
             }
             .setNegativeButton("✖ Zatvori", null)
+            .show()
+    }
+
+    private fun showAdminLoginDialog() {
+        val editText = EditText(this).apply {
+            hint = "🔐 Unesite Admin secret key"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("👑 Admin Panel Pristup")
+            .setMessage("Za pristup Admin panelu unesite secret key:")
+            .setView(editText)
+            .setPositiveButton("🔓 Uloguj se") { dialog, _ ->
+                val code = editText.text.toString().trim()
+                if (code == "ADMIN123") {
+                    // Sačuvaj admin pristup
+                    val sharedPreferences = getSharedPreferences("admin_prefs", MODE_PRIVATE)
+                    sharedPreferences.edit().putBoolean("has_admin_access", true).apply()
+
+                    // Otvori Admin panel
+                    val intent = Intent(this, AdminActivity::class.java)
+                    startActivity(intent)
+
+                    Toast.makeText(this@MainActivity, "✅ Admin pristup odobren!", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this@MainActivity, "❌ Pogrešan kod!", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("❌ Otkaži", null)
             .show()
     }
     private fun openAdminPanel() {
@@ -7226,6 +7326,8 @@ private fun showPremiumRequiredDialog(featureName: String) {
             }
         }
     }
+
+
     // Poboljšana metoda za tačno izračunavanje udaljenosti
     private fun calculateAccurateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
         val earthRadius = 6371000.0 // meters

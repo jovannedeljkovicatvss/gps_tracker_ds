@@ -53,8 +53,6 @@ class UserRepository(private val userDao: UserDao) {
 
     suspend fun deleteUser(userId: String): Boolean {
         return try {
-            // Za sada samo obrišite korisnika iz baze
-            // U budućnosti dodajte brisanje ruta i tačaka
             userDao.deleteUserById(userId)
             true
         } catch (e: Exception) {

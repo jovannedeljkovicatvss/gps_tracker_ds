@@ -51,6 +51,11 @@ org.gradle.jvmargs=--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAM
 --add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED
 
 
+kotlin.native.ignoreDisabledTargets=true
+
+kotlin.daemon.jvm.options=-Xmx2048m
+
+
 FILE: README.md
 
 # gps_tracker_ds
@@ -457,13 +462,6 @@ interface RouteDao {
 
     @Query("DELETE FROM location_points WHERE routeId = :routeId")
     suspend fun deleteRoutePoints(routeId: String)
-
-    @Query("DELETE FROM routes WHERE userId = :userId")
-    suspend fun deleteRoutesByUserId(userId: Long)
-
-    // U LocationDao.kt (ako postoji):
-    @Query("DELETE FROM location_points WHERE routeId IN (SELECT id FROM routes WHERE userId = :userId)")
-    suspend fun deleteLocationPointsByUserId(userId: Long)
 }
 
 
@@ -503,10 +501,8 @@ interface UserDao {
     suspend fun getAllUsers(): List<User> // Za admin panel
 
     @Query("DELETE FROM users WHERE id = :userId")
-    suspend fun deleteUser(userId: Long): Int
+    suspend fun deleteUserById(userId: String)
 
-    @Query("SELECT * FROM users WHERE id = :userId")
-    suspend fun getUserById(userId: Long): User?
 }
 
 
@@ -637,6 +633,9 @@ class RouteRepository(private val routeDao: RouteDao) {
         return route.id
     }
 
+    suspend fun deleteRoutePoints(routeId: String) {
+        routeDao.deleteRoutePoints(routeId)
+    }
     suspend fun updateRoute(route: Route) {
         routeDao.updateRoute(route)
     }
@@ -677,11 +676,9 @@ FILE: app\src\main\java\jovannedeljkovic\gps_tracker_pro\data\repository\UserRep
 
 package jovannedeljkovic.gps_tracker_pro.data.repository
 
-import android.util.Log
 import jovannedeljkovic.gps_tracker_pro.data.database.dao.UserDao
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-
+import jovannedeljkovic.gps_tracker_pro.data.entities.User
+import jovannedeljkovic.gps_tracker_pro.utils.AdminManager
 class UserRepository(private val userDao: UserDao) {
 
     suspend fun registerUser(user: User): Boolean {
@@ -730,6 +727,14 @@ class UserRepository(private val userDao: UserDao) {
         return userDao.getUserById(userId)
     }
 
+    suspend fun deleteUser(userId: String): Boolean {
+        return try {
+            userDao.deleteUserById(userId)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
     suspend fun upgradeToPremium(userId: String, days: Int = 30): Boolean {
         return try {
             val expiry = System.currentTimeMillis() + (days * 24 * 60 * 60 * 1000L)
@@ -781,30 +786,6 @@ class UserRepository(private val userDao: UserDao) {
 
     suspend fun getUserByEmail(email: String): User? {
         return userDao.getUserByEmail(email)
-    }
-    // U UserRepository.kt dodajte:
-    suspend fun deleteUser(userId: Long): Boolean {
-        return withContext(Dispatchers.IO) {
-            try {
-                // 1. Proveri da li korisnik postoji
-                val user = userDao.getUserById(userId)
-                if (user == null) {
-                    return@withContext false
-                }
-
-                // 2. NE DOZVOLI brisanje samog sebe (trenutno ulogovanog)
-                // OVO IZBACITE - ova provera treba da bude u Activity, ne u Repository
-                // val currentUserEmail = // ovo ne može ovde
-
-                // 3. Obriši iz baze
-                val deletedRows = userDao.deleteUser(userId)
-                deletedRows > 0
-
-            } catch (e: Exception) {
-                Log.e("UserRepository", "Error deleting user: ${e.message}")
-                false
-            }
-        }
     }
 }
 
@@ -1164,24 +1145,28 @@ FILE: app\src\main\java\jovannedeljkovic\gps_tracker_pro\ui\admin\AdminActivity.
 
 package jovannedeljkovic.gps_tracker_pro.ui.admin
 
-import android.app.ProgressDialog
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
+import android.os.Environment
+import android.text.InputType  // DODAJ OVO! ??
 import android.widget.EditText
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import jovannedeljkovic.gps_tracker_pro.App
 import jovannedeljkovic.gps_tracker_pro.data.entities.User
+import jovannedeljkovic.gps_tracker_pro.data.entities.Route  // DODAJ OVO! ???
+import jovannedeljkovic.gps_tracker_pro.data.entities.PointOfInterest  // DODAJ OVO! ??
 import jovannedeljkovic.gps_tracker_pro.databinding.ActivityAdminBinding
 import jovannedeljkovic.gps_tracker_pro.ui.auth.LoginActivity
 import jovannedeljkovic.gps_tracker_pro.utils.FeatureManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -1191,6 +1176,8 @@ class AdminActivity : AppCompatActivity() {
     private lateinit var usersAdapter: UsersAdapter
     private val usersList = mutableListOf<User>()
 
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityAdminBinding.inflate(layoutInflater)
@@ -1199,23 +1186,16 @@ class AdminActivity : AppCompatActivity() {
         setupRecyclerView()
         loadUsers()
         setupClickListeners()
+
+        // Dodajte dugme za statistiku ako postoji u layout-u
+        binding.btnStatistics?.setOnClickListener {
+            showUserStatistics()
+        }
     }
 
+    // ISPRAVNO: Ne pozivamo super odmah, veæ kada korisnik potvrdi
     override fun onBackPressed() {
-        // Prvo pozovite super, ali dodajte svoju logiku pre ili posle
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Admin Panel")
-            .setMessage("Da li želite da izaðete iz admin moda?")
-            .setPositiveButton("DA, izloguj me") { _, _ ->
-                // Ova logika æe se izvršiti kada korisnik potvrdi
-                logoutAndExit()
-            }
-            .setNegativeButton("NE, ostani", null)
-            .setOnCancelListener {
-                // Kada korisnik otkaže dijalog, dozvoli normalan back
-                super.onBackPressed()
-            }
-            .show()
+        showExitConfirmationDialog()
     }
 
     private fun showExitConfirmationDialog() {
@@ -1229,18 +1209,6 @@ class AdminActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun checkIfCanDeleteUsers(): Boolean {
-        // Proveri da li je super admin
-        val adminPrefs = getSharedPreferences("admin_prefs", MODE_PRIVATE)
-        val isSuperAdmin = adminPrefs.getBoolean("is_super_admin", false)
-
-        // Ili proveri prema email-u
-        val userPrefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
-        val currentEmail = userPrefs.getString("user_email", "")
-        val isMasterAdmin = currentEmail == "master@admin.com" || currentEmail == "your_email@gmail.com"
-
-        return isSuperAdmin || isMasterAdmin
-    }
     private fun logoutAndExit() {
         // 1. Oèisti admin pristup
         getSharedPreferences("admin_prefs", MODE_PRIVATE)
@@ -1248,12 +1216,15 @@ class AdminActivity : AppCompatActivity() {
             .clear()
             .apply()
 
-        // 2. Idi na Login
+        // 2. Kreiraj intent za LoginActivity
         val intent = Intent(this, LoginActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
         }
 
+        // 3. Pokreni LoginActivity
         startActivity(intent)
+
+        // 4. Zatvori ovu aktivnost
         finish()
 
         Toast.makeText(this, "Admin mod iskljuèen", Toast.LENGTH_SHORT).show()
@@ -1269,6 +1240,33 @@ class AdminActivity : AppCompatActivity() {
         }
     }
 
+    private fun showUserOptionsDialog(user: User) {
+
+
+        val options = arrayOf(
+            "?? Postavi kao ADMIN",
+            "? Postavi kao PREMIUM",
+            "?? Postavi kao BASIC",
+            "??? Obriši korisnika",
+            "?? Podaci o korisniku",
+            "?? Statistika korisnika"
+        )
+
+        AlertDialog.Builder(this)
+            .setTitle("??? Upravljanje korisnikom: ${user.email}")
+            .setItems(options) { dialog, which ->
+                when (which) {
+                    0 -> setUserRole(user, "ADMIN")
+                    1 -> setUserRole(user, "PREMIUM")
+                    2 -> setUserRole(user, "BASIC")
+                    3 -> deleteUserWithAllData(user)
+                    4 -> showUserDetails(user)
+                    5 -> showUserSpecificStatistics(user)
+                }
+            }
+            .setNegativeButton("? Otkaži", null)
+            .show()
+    }
     private fun loadUsers() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
@@ -1278,155 +1276,221 @@ class AdminActivity : AppCompatActivity() {
                 usersList.clear()
                 usersList.addAll(users)
 
-                runOnUiThread {
+                withContext(Dispatchers.Main) {
                     usersAdapter.notifyDataSetChanged()
                     binding.tvUserCount.text = "Ukupno korisnika: ${users.size}"
                 }
             } catch (e: Exception) {
-                runOnUiThread {
-                    Toast.makeText(this@AdminActivity, "Greška pri uèitavanju korisnika: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-    }
-
-    private fun showUserOptionsDialog(user: User) {
-        val options = arrayOf(
-            "Postavi kao ADMIN",
-            "Postavi kao PREMIUM",
-            "Postavi kao BASIC",
-            "??? Obriši korisnika",
-            "??? Podaci o korisniku",
-            "?? Statistika korisnika"  // Nova opcija
-        )
-
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Upravljanje korisnikom: ${user.email}")
-            .setItems(options) { dialog, which ->
-                when (which) {
-                    0 -> setUserRole(user, "ADMIN")
-                    1 -> setUserRole(user, "PREMIUM")
-                    2 -> setUserRole(user, "BASIC")
-                    3 -> showDeleteOptions(user)  // Poboljšano brisanje
-                    4 -> showUserDetails(user)
-                    5 -> showUserStatistics(user)  // Nova funkcionalnost
-                }
-            }
-            .setNegativeButton("Otkaži", null)
-            .show()
-    }
-
-    private fun showDeleteOptions(user: User) {
-        val options = arrayOf(
-            "?? Obriši NALOG (sve podatke)",
-            "?? Obriši samo STATISTIKU",
-            "??? Obriši samo RUTE",
-            "Otkaži"
-        )
-
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Brisanje: ${user.email}")
-            .setItems(options) { dialog, which ->
-                when (which) {
-                    0 -> deleteUserAccount(user)  // Kompletno brisanje
-                    1 -> deleteUserStatistics(user)
-                    2 -> deleteUserRoutes(user)
-                    // 3 -> otkaži (ništa)
-                }
-            }
-            .show()
-    }
-
-    private fun deleteUserAccount(user: User) {
-        // Finalni konfirmacioni dijalog
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("?? TRAJNO BRISANJE NALOGA")
-            .setMessage("""
-            OVO ÆE TRAJNO OBRISATI:
-            
-            ? Korisnièki nalog: ${user.email}
-            ? Sve rute i ture
-            ? Sve lokacije i istoriju
-            ? Podešavanja i statistiku
-            
-            Ova akcija se NE MOŽE poništiti!
-            
-            Unesite "${user.email}" da potvrdite:
-            """.trimIndent())
-            .setView(EditText(this).apply {
-                hint = "Unesite email za potvrdu"
-            })
-            .setPositiveButton("OBRIŠI TRAJNO") { dialog, _ ->
-                val input = (dialog as AlertDialog).findViewById<EditText>(android.R.id.custom)
-                if (input?.text?.toString() == user.email) {
-                    performCompleteDeletion(user)
-                } else {
-                    Toast.makeText(this, "? Email se ne poklapa!", Toast.LENGTH_SHORT).show()
-                }
-            }
-            .setNegativeButton("Otkaži", null)
-            .setIcon(android.R.drawable.ic_delete)
-            .show()
-    }
-
-    private fun performCompleteDeletion(user: User) {
-        // Pokazi progress bar
-        val progressDialog = ProgressDialog(this).apply {
-            setMessage("Brisanje korisnika...")
-            setCancelable(false)
-        }
-        progressDialog.show()
-
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val app = application as App
-
-                // 1. Prvo obriši sve zavisne podatke
-                app.routeRepository.deleteRoutesByUserId(user.id)
-                app.locationRepository.deleteLocationsByUserId(user.id)
-
-                // 2. Onda obriši korisnika
-                val success = app.userRepository.deleteUser(user.id)
-
-                runOnUiThread {
-                    progressDialog.dismiss()
-
-                    if (success) {
-                        Toast.makeText(
-                            this@AdminActivity,
-                            "? Korisnik ${user.email} je trajno obrisan",
-                            Toast.LENGTH_LONG
-                        ).show()
-
-                        // Animiraj uklanjanje iz RecyclerView
-                        val position = usersList.indexOfFirst { it.id == user.id }
-                        if (position != -1) {
-                            usersList.removeAt(position)
-                            usersAdapter.notifyItemRemoved(position)
-                            binding.tvUserCount.text = "Ukupno korisnika: ${usersList.size}"
-                        }
-
-                    } else {
-                        Toast.makeText(
-                            this@AdminActivity,
-                            "? Greška pri brisanju",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
-
-            } catch (e: Exception) {
-                runOnUiThread {
-                    progressDialog.dismiss()
+                withContext(Dispatchers.Main) {
                     Toast.makeText(
                         this@AdminActivity,
-                        "Greška: ${e.message}",
+                        "Greška pri uèitavanju korisnika: ${e.message}",
                         Toast.LENGTH_SHORT
                     ).show()
                 }
             }
         }
     }
+
+    private fun showUserSpecificStatistics(user: User) {
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("?? Uèitavanje statistike...")
+            .setMessage("Prikupljam podatke za korisnika: ${user.email}")
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val app = application as App
+
+                // Uèitaj podatke samo za ovog korisnika
+                val userRoutes = app.routeRepository.getUserRoutes(user.id)
+                val userPoints = app.pointRepository.getUserPoints(user.id)
+
+                // Izraèunaj statistike
+                val totalRoutes = userRoutes.size
+                val totalPoints = userPoints.size
+                val totalDistance = userRoutes.sumOf { it.distance }
+                val totalDuration = userRoutes.sumOf { it.duration } / 1000 / 60 // u minutima
+
+                val latestRoute = userRoutes.maxByOrNull { it.startTime }
+                val oldestRoute = userRoutes.minByOrNull { it.startTime }
+
+                val dateFormat = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
+
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+
+                    val statsMessage = """
+                ?? STATISTIKA KORISNIKA: ${user.email}
+                
+                ?? Osnovne informacije:
+                   ?? Kreiran: ${dateFormat.format(Date(user.createdAt))}
+                   ??? Uloga: ${user.role}
+                   ? Premium: ${if (user.role == "PREMIUM") "DA" else "NE"}
+                   ${if (user.role == "PREMIUM" && user.premiumExpiry > 0) "   ?? Premium istièe: ${dateFormat.format(Date(user.premiumExpiry))}" else ""}
+                
+                ?? Aktivnost:
+                   ??? Ukupno ruta: $totalRoutes
+                   ?? Ukupno taèaka: $totalPoints
+                   ?? Ukupna udaljenost: ${String.format("%.2f", totalDistance/1000)} km
+                   ?? Ukupno vreme: ${totalDuration} minuta
+                
+                ? Vremenski okviri:
+                   ?? Poslednja ruta: ${latestRoute?.let { dateFormat.format(Date(it.startTime)) } ?: "Nema"}
+                   ??? Prva ruta: ${oldestRoute?.let { dateFormat.format(Date(it.startTime)) } ?: "Nema"}
+                
+                ?? Status: ${if (totalRoutes > 0) "?? AKTIVAN" else "?? NEAKTIVAN"}
+                """.trimIndent()
+
+                    AlertDialog.Builder(this@AdminActivity)
+                        .setTitle("?? Statistika korisnika")
+                        .setMessage(statsMessage)
+                        .setPositiveButton("? Zatvori", null)
+                        .setNegativeButton("?? Eksportuj CSV") { dialog, which ->
+                            exportUserSpecificCSV(user, userRoutes, userPoints)
+                        }
+                        .show()
+                }
+
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(
+                        this@AdminActivity,
+                        "? Greška pri uèitavanju statistike: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+
+
+    private fun exportUserSpecificCSV(user: User, routes: List<Route>, points: List<PointOfInterest>) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val fileName = "korisnik_${user.email}_statistika_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.csv"
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                val csvFile = File(downloadsDir, fileName)
+
+                FileWriter(csvFile).use { writer ->
+                    // Header za korisnika
+                    writer.append("EMAIL,ULOGA,DATUM_KREIRANJA,PREMIUM_ISTICE\n")
+                    val premiumExpiry = if (user.premiumExpiry > 0) {
+                        SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(user.premiumExpiry))
+                    } else "NEMA"
+
+                    writer.append("${user.email},${user.role},${SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(user.createdAt))},$premiumExpiry\n\n")
+
+                    // Rute
+                    writer.append("RUTE\n")
+                    writer.append("ID,IME,UDALJENOST(m),VREME(min),DATUM_POCETKA\n")
+                    routes.forEach { route ->
+                        val duration = route.duration / 1000 / 60
+                        writer.append("${route.id},${route.name},${route.distance},$duration,${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(route.startTime))}\n")
+                    }
+
+                    writer.append("\n")
+
+                    // Taèke
+                    writer.append("TAÈKE INTERESA\n")
+                    writer.append("ID,IME,LATITUDA,LONGITUDA,DATUM_KREIRANJA\n")
+                    points.forEach { point ->
+                        writer.append("${point.id},${point.name},${point.latitude},${point.longitude},${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(point.createdAt))}\n")
+                    }
+                }
+
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@AdminActivity,
+                        "? Statistika eksportovana u CSV!\n?? $fileName",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@AdminActivity,
+                        "? Greška pri eksportu: ${e.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun deleteUserWithAllData(user: User) {
+        AlertDialog.Builder(this)
+            .setTitle("??? Brisanje korisnika")
+            .setMessage("Da li ste sigurni da želite da obrišete korisnika ${user.email}?\n\n" +
+                    "Ova akcija æe obrisati:\n" +
+                    "?? Sve rute korisnika\n" +
+                    "?? Sve taèke interesa\n" +
+                    "?? Korisnièki nalog\n\n" +
+                    "?? Ova akcija se NE MOŽE poništiti!")
+            .setPositiveButton("??? Obriši") { dialog, which ->
+                performUserDeletion(user)
+            }
+            .setNegativeButton("? Otkaži", null)
+            .show()
+    }
+
+    private fun performUserDeletion(user: User) {
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("?? Brisanje u toku...")
+            .setMessage("Brišem korisnika i sve podatke...")
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val app = application as App
+
+                // 1. Obriši sve rute korisnika
+                val userRoutes = app.routeRepository.getUserRoutes(user.id)
+                userRoutes.forEach { route ->
+                    // Prvo obriši sve taèke rute
+                    app.routeRepository.deleteRoutePoints(route.id)
+                    // Onda obriši rutu
+                    app.routeRepository.deleteRoute(route)
+                }
+
+                // 2. Obriši sve taèke interesa
+                val userPoints = app.pointRepository.getUserPoints(user.id)
+                userPoints.forEach { point ->
+                    app.pointRepository.deletePoint(point)
+                }
+
+                // 3. Obriši korisnika
+                app.userRepository.deleteUser(user.id)
+
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(
+                        this@AdminActivity,
+                        "? Korisnik ${user.email} uspešno obrisan sa svim podacima!",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    loadUsers() // Osveži listu
+                }
+
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(
+                        this@AdminActivity,
+                        "? Greška pri brisanju: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+
 
     private fun setUserRole(user: User, newRole: String) {
         lifecycleScope.launch(Dispatchers.IO) {
@@ -1439,87 +1503,24 @@ class AdminActivity : AppCompatActivity() {
                     else -> false
                 }
 
-                runOnUiThread {
-                    if (success) {
-                        Toast.makeText(this@AdminActivity, "Korisnik ${user.email} sada je $newRole", Toast.LENGTH_LONG).show()
-                        loadUsers()
-                    } else {
-                        Toast.makeText(this@AdminActivity, "Greška pri promeni uloge", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            } catch (e: Exception) {
-                runOnUiThread {
-                    Toast.makeText(this@AdminActivity, "Greška: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-    }
-
-    private fun deleteUser(user: User) {
-        // Proveri da li pokušava da obriše samog sebe
-        val sharedPrefs = getSharedPreferences("user_prefs", MODE_PRIVATE)
-        val currentUserEmail = sharedPrefs.getString("user_email", "")
-
-        if (user.email == currentUserEmail) {
-            Toast.makeText(
-                this,
-                "? Ne možete obrisati samog sebe!",
-                Toast.LENGTH_LONG
-            ).show()
-            return
-        }
-
-        // Konfirmacioni dijalog
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("?? Brisanje korisnika")
-            .setMessage("""
-            Da li ste SIGURNI da želite da obrišete ovog korisnika?
-            
-            ?? Email: ${user.email}
-            ?? Ime: ${user.name}
-            ?? Uloga: ${user.role}
-            
-            ?? Ova akcija je TRAJNA i ne može se poništiti!
-            """.trimIndent())
-            .setPositiveButton("DA, OBRISI") { dialog, _ ->
-                performUserDeletion(user)
-                dialog.dismiss()
-            }
-            .setNegativeButton("NE, Otkaži", null)
-            .setIcon(android.R.drawable.ic_dialog_alert)
-            .show()
-    }
-
-    private fun performUserDeletion(user: User) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val app = application as App
-                val success = app.userRepository.deleteUser(user.id)
-
-                runOnUiThread {
+                withContext(Dispatchers.Main) {
                     if (success) {
                         Toast.makeText(
                             this@AdminActivity,
-                            "? Korisnik ${user.email} je uspešno obrisan",
+                            "Korisnik ${user.email} sada je $newRole",
                             Toast.LENGTH_LONG
                         ).show()
-
-                        // Ažuriraj listu
                         loadUsers()
-
-                        // Opcionalno: obriši i korisnièke rute/istoriju
-                        deleteUserRelatedData(user.id)
-
                     } else {
                         Toast.makeText(
                             this@AdminActivity,
-                            "? Greška pri brisanju korisnika",
+                            "Greška pri promeni uloge",
                             Toast.LENGTH_SHORT
                         ).show()
                     }
                 }
             } catch (e: Exception) {
-                runOnUiThread {
+                withContext(Dispatchers.Main) {
                     Toast.makeText(
                         this@AdminActivity,
                         "Greška: ${e.message}",
@@ -1530,37 +1531,66 @@ class AdminActivity : AppCompatActivity() {
         }
     }
 
-    // Opcionalno: Obriši sve podatke vezane za korisnika
-    private fun deleteUserRelatedData(userId: Long) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val app = application as App
+    private fun deleteUser(user: User) {
+        AlertDialog.Builder(this)
+            .setTitle("? Brisanje korisnika")
+            .setMessage("Da li ste sigurni da želite da obrišete korisnika ${user.email}?\n\n" +
+                    "Ova akcija æe obrisati:\n" +
+                    "• Sve rute korisnika\n" +
+                    "• Sve taèke interesa\n" +
+                    "• Korisnièki nalog\n\n" +
+                    "Ova akcija se NE MOŽE poništiti!")
+            .setPositiveButton("? Obriši") { dialog, which ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                    try {
+                        val app = application as App
 
-                // 1. Prvo obriši sve location points za korisnika
-                app.routeDao.deleteLocationPointsByUserId(userId)
+                        // Prvo obrišite rute korisnika
+                        val userRoutes = app.routeRepository.getUserRoutes(user.id)
+                        userRoutes.forEach { route ->
+                            app.routeRepository.deleteRoute(route)
+                        }
 
-                // 2. Onda obriši rute
-                app.routeDao.deleteRoutesByUserId(userId)
+                        // Zatim obrišite taèke korisnika
+                        val userPoints = app.pointRepository.getUserPoints(user.id)
+                        userPoints.forEach { point ->
+                            app.pointRepository.deletePoint(point)
+                        }
 
-                // 3. Obriši points of interest (ako postoje)
-                app.pointOfInterestDao.deletePointsByUserId(userId)
+                        // Na kraju obrišite korisnika
+                        // Dodajte ovu metodu u UserDao:
+                        // @Query("DELETE FROM users WHERE id = :userId")
+                        // suspend fun deleteUserById(userId: String)
 
-                Log.d("AdminActivity", "Svi podaci za user $userId obrisani")
+                        // Za sada, možete koristiti workaround:
+                        // Ovde možete dodati logiku za brisanje korisnika
 
-            } catch (e: Exception) {
-                Log.e("AdminActivity", "Error deleting user data: ${e.message}")
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(
+                                this@AdminActivity,
+                                "?? Brisanje korisnika æe biti implementirano u narednoj verziji",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            // loadUsers() // Osveži listu kada implementirate brisanje
+                        }
+                    } catch (e: Exception) {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(
+                                this@AdminActivity,
+                                "? Greška: ${e.message}",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }
             }
-        }
+            .setNegativeButton("? Otkaži", null)
+            .show()
     }
 
     private fun showUserDetails(user: User) {
         val dateFormat = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
         val createdDate = dateFormat.format(Date(user.createdAt))
-
-        // Proveri da li je trenutni korisnik
-        val currentUserEmail = getSharedPreferences("user_prefs", MODE_PRIVATE)
-            .getString("user_email", "")
-        val isCurrentUser = user.email == currentUserEmail
 
         val premiumInfo = if (user.role == "PREMIUM" && user.premiumExpiry > 0) {
             val expiryDate = dateFormat.format(Date(user.premiumExpiry))
@@ -1570,25 +1600,125 @@ class AdminActivity : AppCompatActivity() {
         }
 
         val message = """
-        ?? Email: ${user.email}
-        ?? Ime: ${user.name}
-        ?? Telefon: ${user.phone}
-        ?? Uloga: ${FeatureManager.getUserRoleDisplayName(user)}
-        ?? Kreiran: $createdDate
-        ?? $premiumInfo
-        ${if (isCurrentUser) "\n?? Ovo ste VI (ne možete obrisati sebe)" else ""}
-    """.trimIndent()
+            ?? Email: ${user.email}
+            ?? Ime: ${user.name}
+            ?? Telefon: ${user.phone}
+            ?? Uloga: ${FeatureManager.getUserRoleDisplayName(user)}
+            ?? Kreiran: $createdDate
+            ? $premiumInfo
+        """.trimIndent()
 
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Detalji korisnika")
             .setMessage(message)
             .setPositiveButton("OK", null)
-            .setNeutralButton(if (!isCurrentUser) "??? Obriši" else "Zatvori") { dialog, _ ->
-                if (!isCurrentUser) {
-                    deleteUser(user)
+            .show()
+    }
+
+    private fun showUserStatistics() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val app = application as App
+                val allUsers = app.userRepository.getAllUsers()
+
+                // Izraèunaj statistike
+                val totalUsers = allUsers.size
+                val adminCount = allUsers.count { it.role == "ADMIN" }
+                val premiumCount = allUsers.count { it.role == "PREMIUM" }
+                val basicCount = allUsers.count { it.role == "BASIC" }
+
+                // Proseèno vreme od kreiranja naloga
+                val averageAccountAge = allUsers.map {
+                    System.currentTimeMillis() - it.createdAt
+                }.average() / (1000 * 60 * 60 * 24) // u danima
+
+                // Aktivni premium korisnici (još nije istekla pretplata)
+                val activePremium = allUsers.count {
+                    it.role == "PREMIUM" && it.premiumExpiry > System.currentTimeMillis()
+                }
+
+                withContext(Dispatchers.Main) {
+                    val statsMessage = """
+                        ?? STATISTIKA KORISNIKA
+                        
+                        ?? Ukupno korisnika: $totalUsers
+                        
+                        ?? Distribucija uloga:
+                           ?? Admin: $adminCount
+                           ? Premium: $premiumCount (od toga aktivnih: $activePremium)
+                           ?? Basic: $basicCount
+                        
+                        ?? Proseèna starost naloga: ${String.format("%.1f", averageAccountAge)} dana
+                        
+                        ${if (premiumCount > 0) "?? Aktivni premium: ${String.format("%.1f", (activePremium.toDouble() / premiumCount * 100))}%" else "?? Nema premium korisnika"}
+                        
+                        ?? Poslednji pregled: ${SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault()).format(Date())}
+                    """.trimIndent()
+
+                    AlertDialog.Builder(this@AdminActivity)
+                        .setTitle("?? Statistika korisnika")
+                        .setMessage(statsMessage)
+                        .setPositiveButton("?? Eksportuj CSV") { dialog, which ->
+                            exportUserStatisticsToCSV(allUsers)
+                        }
+                        .setNegativeButton("? Zatvori", null)
+                        .show()
+                }
+
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@AdminActivity,
+                        "? Greška pri uèitavanju statistike: ${e.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
-            .show()
+        }
+    }
+
+    private fun exportUserStatisticsToCSV(users: List<User>) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val fileName = "korisnici_statistika_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.csv"
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                val csvFile = File(downloadsDir, fileName)
+
+                FileWriter(csvFile).use { writer ->
+                    // Header
+                    writer.append("Email,Ime,Telefon,Uloga,Datum kreiranja,Premium istièe,Starost naloga (dana)\n")
+
+                    // Podaci
+                    users.forEach { user ->
+                        val accountAgeDays = (System.currentTimeMillis() - user.createdAt) / (1000 * 60 * 60 * 24)
+                        val premiumExpiry = if (user.premiumExpiry > 0) {
+                            SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(user.premiumExpiry))
+                        } else "Nema premium"
+
+                        writer.append("${user.email},${user.name},${user.phone},${user.role},")
+                        writer.append("${SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(user.createdAt))},")
+                        writer.append("$premiumExpiry,$accountAgeDays\n")
+                    }
+                }
+
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@AdminActivity,
+                        "? Statistika eksportovana u CSV: $fileName",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@AdminActivity,
+                        "? Greška pri eksportu: ${e.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
     }
 
     private fun setupClickListeners() {
@@ -1988,6 +2118,7 @@ import android.content.ClipData
 import android.location.Location
 import androidx.annotation.RequiresApi
 import kotlin.math.*
+
 import com.google.android.material.button.MaterialButton
 import org.osmdroid.tileprovider.MapTileProviderBase
 import org.osmdroid.util.MapTileIndex
@@ -2083,6 +2214,10 @@ import android.content.ActivityNotFoundException // DODAJ OVO
 import java.nio.charset.Charset // DODAJ OVO
 import android.content.ContentUris
 import android.provider.MediaStore
+import android.text.InputType
+import com.google.gson.reflect.TypeToken
+import org.json.JSONObject
+import java.lang.reflect.Type
 
 
 data class GpxFileInfo(
@@ -2698,10 +2833,198 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun importBackupData(uri: Uri) {
-        // Ovo je kompleksnija funkcionalnost - možete je implementirati kasnije
         Toast.makeText(this, "?? Funkcionalnost za backup u izradi...", Toast.LENGTH_LONG).show()
+
+        // Za sada samo prikažite poruku
+        AlertDialog.Builder(this)
+            .setTitle("?? Uvoz Backup Podataka")
+            .setMessage("Ova funkcionalnost æe biti dostupna u narednoj verziji aplikacije.\n\n" +
+                    "Planirane moguænosti:\n" +
+                    "• Uvoz ruta iz GPX/JSON\n" +
+                    "• Uvoz taèaka interesa\n" +
+                    "• Restauracija celokupnih podataka")
+            .setPositiveButton("OK", null)
+            .show()
     }
 
+    private fun showBackupImportDialog(jsonObject: JSONObject) {
+        val backupInfo = """
+        ?? Podaci u backup fajlu:
+        
+        ?? Datum backup-a: ${jsonObject.optString("backupDate", "Nepoznato")}
+        ?? Verzija aplikacije: ${jsonObject.optString("appVersion", "Nepoznato")}
+        
+        Izaberite šta želite da uvezete:
+    """.trimIndent()
+
+        AlertDialog.Builder(this)
+            .setTitle("?? Opcije uvoza backup-a")
+            .setMessage(backupInfo)
+            .setPositiveButton("??? Samo moje rute i taèke") { dialog, which ->
+                importUserDataFromBackup(jsonObject)
+            }
+            .setNegativeButton("? Otkaži", null)
+            .show()
+    }
+    private fun importUserDataFromBackup(jsonObject: JSONObject) {
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("?? Uvoz podataka...")
+            .setMessage("Uvozim rute i taèke...")
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val app = application as App
+                val gson = Gson()
+
+                // Uvezi rute
+                if (jsonObject.has("routes")) {
+                    val routesJson = jsonObject.getJSONArray("routes").toString()
+                    val routesType: Type = object : TypeToken<List<Route>>() {}.type
+                    val routes: List<Route> = gson.fromJson(routesJson, routesType)
+
+                    routes.forEach { route ->
+                        // Ažuriraj userId na trenutnog korisnika
+                        val updatedRoute = route.copy(userId = getCurrentUserId())
+                        app.routeRepository.createRoute(updatedRoute)
+                    }
+                }
+
+                // Uvezi taèke
+                if (jsonObject.has("points")) {
+                    val pointsJson = jsonObject.getJSONArray("points").toString()
+                    val pointsType: Type = object : TypeToken<List<PointOfInterest>>() {}.type
+                    val points: List<PointOfInterest> = gson.fromJson(pointsJson, pointsType)
+
+                    points.forEach { point ->
+                        // Ažuriraj userId na trenutnog korisnika
+                        val updatedPoint = point.copy(userId = getCurrentUserId())
+                        app.pointRepository.addPoint(updatedPoint)
+                    }
+                }
+
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(
+                        this@MainActivity,
+                        "? Podaci uspešno uvezeni!",
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                    // Osveži prikaz
+                    loadPointsOfInterest()
+                    loadSavedRoutes()
+                    refreshMapAndRoute()
+                }
+
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(
+                        this@MainActivity,
+                        "? Greška pri uvozu: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+    private fun showBackupImportOptions(backupData: BackupData) {
+        val message = """
+        ?? Pronaðeni podaci u backup-u:
+        
+        ?? Korisnici: ${backupData.users.size}
+        ??? Rute: ${backupData.routes.size}
+        ?? Taèke: ${backupData.points.size}
+        ?? Datum backup-a: ${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(backupData.backupDate))}
+        ?? Verzija aplikacije: ${backupData.appVersion}
+        
+        ?? Pažnja: Ovim æete zameniti trenutne podatke!
+        
+        Izaberite opciju uvoza:
+    """.trimIndent()
+
+        AlertDialog.Builder(this)
+            .setTitle("?? Opcije uvoza backup-a")
+            .setMessage(message)
+            .setPositiveButton("? Uvezi SVE podatke") { dialog, which ->
+                importAllBackupData(backupData)
+            }
+            /*.setNeutralButton("?? Samo korisnike") { dialog, which ->
+                importUsersFromBackup(backupData.users)
+            }*/
+            .setNegativeButton("? Otkaži", null)
+            .show()
+    }
+
+    // Dodajte BackupData klase:
+    data class BackupData(
+        val users: List<User>,
+        val routes: List<Route>,
+        val points: List<PointOfInterest>,
+        val backupDate: Long,
+        val appVersion: String
+    )
+
+
+    private fun importAllBackupData(backupData: BackupData) {
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("?? Uvoz svih podataka...")
+            .setMessage("Molimo saèekajte...")
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val app = application as App
+
+                // 1. Obriši sve postojeæe podatke
+                val currentUserId = getCurrentUserId()
+
+                // 2. Uvezi korisnike
+                backupData.users.forEach { user ->
+                    app.userRepository.registerUser(user)
+                }
+
+                // 3. Uvezi rute
+                backupData.routes.forEach { route ->
+                    app.routeRepository.createRoute(route)
+                }
+
+                // 4. Uvezi taèke
+                backupData.points.forEach { point ->
+                    app.pointRepository.addPoint(point)
+                }
+
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(
+                        this@MainActivity,
+                        "? Uspešno uvezeno ${backupData.users.size} korisnika, ${backupData.routes.size} ruta i ${backupData.points.size} taèaka!",
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                    // Osveži prikaz
+                    loadPointsOfInterest()
+                    loadSavedRoutes()
+                    refreshMapAndRoute()
+                }
+
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(
+                        this@MainActivity,
+                        "? Greška pri uvozu: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
     private fun showDeleteAllDataDialog() {
         AlertDialog.Builder(this)
             .setTitle("?? Brisanje svih podataka")
@@ -3423,6 +3746,75 @@ private fun checkButtonAvailability() {
             false
         }
     }
+
+    /*private fun deleteUserWithAllData(user: User) {
+        AlertDialog.Builder(this)
+            .setTitle("??? Brisanje korisnika")
+            .setMessage("Da li ste sigurni da želite da obrišete korisnika ${user.email}?\n\n" +
+                    "Ova akcija æe obrisati:\n" +
+                    "?? Sve rute korisnika\n" +
+                    "?? Sve taèke interesa\n" +
+                    "?? Korisnièki nalog\n\n" +
+                    "?? Ova akcija se NE MOŽE poništiti!")
+            .setPositiveButton("??? Obriši") { dialog, which ->
+                performUserDeletion(user)
+            }
+            .setNegativeButton("? Otkaži", null)
+            .show()
+    }
+
+    private fun performUserDeletion(user: User) {
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("?? Brisanje u toku...")
+            .setMessage("Brišem korisnika i sve podatke...")
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val app = application as App
+
+                // 1. Obriši sve rute korisnika
+                val userRoutes = app.routeRepository.getUserRoutes(user.id)
+                userRoutes.forEach { route ->
+                    // Prvo obriši sve taèke rute
+                    app.routeRepository.deleteRoutePoints(route.id)
+                    // Onda obriši rutu
+                    app.routeRepository.deleteRoute(route)
+                }
+
+                // 2. Obriši sve taèke interesa
+                val userPoints = app.pointRepository.getUserPoints(user.id)
+                userPoints.forEach { point ->
+                    app.pointRepository.deletePoint(point)
+                }
+
+                // 3. Obriši korisnika
+                app.userRepository.deleteUser(user.id)
+
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(
+                        this@AdminActivity,  // ? ISPRAVNO: Dodajte @
+                        "? Korisnik ${user.email} uspešno obrisan sa svim podacima!",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    loadUsers() // Osveži listu
+                }
+
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(
+                        this@AdminActivity,
+                        "? Greška pri brisanju: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }*/
     private fun showNavigationMenu() {
         val options = arrayOf(
             "??? Offline Mape",
@@ -3443,11 +3835,41 @@ private fun checkButtonAvailability() {
                     2 -> toggleCompass()
                     3 -> toggleTrackingMode()
                     4 -> showSettings()
-                    5 -> openAdminPanel()
+                    5 -> showAdminLoginDialog()
                     6 -> logout()
                 }
             }
             .setNegativeButton("? Zatvori", null)
+            .show()
+    }
+
+    private fun showAdminLoginDialog() {
+        val editText = EditText(this).apply {
+            hint = "?? Unesite Admin secret key"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("?? Admin Panel Pristup")
+            .setMessage("Za pristup Admin panelu unesite secret key:")
+            .setView(editText)
+            .setPositiveButton("?? Uloguj se") { dialog, _ ->
+                val code = editText.text.toString().trim()
+                if (code == "ADMIN123") {
+                    // Saèuvaj admin pristup
+                    val sharedPreferences = getSharedPreferences("admin_prefs", MODE_PRIVATE)
+                    sharedPreferences.edit().putBoolean("has_admin_access", true).apply()
+
+                    // Otvori Admin panel
+                    val intent = Intent(this, AdminActivity::class.java)
+                    startActivity(intent)
+
+                    Toast.makeText(this@MainActivity, "? Admin pristup odobren!", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this@MainActivity, "? Pogrešan kod!", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("? Otkaži", null)
             .show()
     }
     private fun openAdminPanel() {
@@ -7211,7 +7633,7 @@ private fun showPremiumRequiredDialog(featureName: String) {
 
             when (trackingMode) {
                 "self" -> {
-                    binding.btnTrackingMode.text = " Moj Treking"
+                    binding.btnTrackingMode.text = " Pratim sebe"
                     binding.btnTrackingMode.setBackgroundResource(R.drawable.button_dark_blue)
                     Toast.makeText(this, "?? Režim: Praæenje sebe", Toast.LENGTH_SHORT).show()
                     Log.d("TrackingMode", "Prebaèen na režim praæenja sebe")
@@ -7219,7 +7641,7 @@ private fun showPremiumRequiredDialog(featureName: String) {
                 "other" -> {
                     binding.btnTrackingMode.text = "???? Pratim Drugog"
                     binding.btnTrackingMode.setBackgroundResource(R.drawable.button_dark_blue_accent)
-                    Toast.makeText(this, "?? Režim: Praæenje drugog ureðaja", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "\uD83D\uDC64\uD83D\uDC64 Režim: Praæenje drugog ureðaja", Toast.LENGTH_SHORT).show()
                     Log.d("TrackingMode", "Prebaèen na režim praæenja drugog")
                 }
             }
@@ -9016,6 +9438,8 @@ private fun showPremiumRequiredDialog(featureName: String) {
             }
         }
     }
+
+
     // Poboljšana metoda za taèno izraèunavanje udaljenosti
     private fun calculateAccurateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
         val earthRadius = 6371000.0 // meters
@@ -10307,6 +10731,59 @@ FILE: app\src\main\res\drawable\button_red_round.xml
 </shape>
 
 
+FILE: app\src\main\res\drawable\button_rounded_rectangle.xml
+
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <corners
+        android:radius="20dp" />
+
+    <solid
+        android:color="#4CAF50" />
+
+    <padding
+        android:left="16dp"
+        android:top="8dp"
+        android:right="16dp"
+        android:bottom="8dp" />
+</shape>
+
+
+FILE: app\src\main\res\drawable\button_rounded_rectangle_pressed.xml
+
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <corners
+        android:radius="20dp" />
+
+    <solid
+        android:color="#388E3C" /> <!-- Tamnija zelena -->
+
+    <padding
+        android:left="16dp"
+        android:top="8dp"
+        android:right="16dp"
+        android:bottom="8dp" />
+</shape>
+
+
+FILE: app\src\main\res\drawable\button_rounded_rectangle_selector.xml
+
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item android:drawable="@drawable/button_rounded_rectangle_pressed"
+        android:state_pressed="true" />
+
+    <item android:drawable="@drawable/button_rounded_rectangle" />
+
+</selector>
+
+
 FILE: app\src\main\res\drawable\button_tracking_all.xml
 
 <?xml version="1.0" encoding="utf-8"?>
@@ -10736,6 +11213,21 @@ FILE: app\src\main\res\drawable\ic_menu_white.xml
 </vector>
 
 
+FILE: app\src\main\res\drawable\ic_more_vert_white.xml
+
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFF">
+
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M12,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM12,10c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2zM12,16c-1.1,0 -2,0.9 -2,2s0.9,2 2,2 2,-0.9 2,-2 -0.9,-2 -2,-2z" />
+</vector>
+
+
 FILE: app\src\main\res\drawable\ic_my_location.xml
 
 <?xml version="1.0" encoding="utf-8"?>
@@ -11031,6 +11523,20 @@ FILE: app\src\main\res\drawable\panel_transparent_dark.xml
 </shape>
 
 
+FILE: app\src\main\res\drawable\rounded_bg_blue.xml
+
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/primary_blue" />
+    <corners android:radius="8dp" />
+    <padding
+        android:left="8dp"
+        android:top="4dp"
+        android:right="8dp"
+        android:bottom="4dp" />
+</shape>
+
+
 FILE: app\src\main\res\drawable\target.xml
 
 <?xml version="1.0" encoding="utf-8"?>
@@ -11071,65 +11577,118 @@ FILE: app\src\main\res\layout\activity_admin.xml
 
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp"
-    android:background="@color/primary_dark">
+    android:background="@color/primary_dark"
+    android:padding="8dp">
 
-    <!-- Header -->
+    <!-- Toolbar sa akcijama -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@color/primary_dark"
+        android:minHeight="?attr/actionBarSize"
+        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
+        app:titleTextColor="@color/white">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:paddingHorizontal="8dp">
+
+            <!-- Nazad dugme -->
+            <Button
+                android:id="@+id/btnBack"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentStart="true"
+                android:layout_centerVertical="true"
+                android:background="@drawable/button_dark_blue"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="8dp"
+                android:text="?"
+                android:textColor="@color/white"
+                android:textSize="16sp" />
+
+            <!-- Naslov -->
+            <TextView
+                android:id="@+id/tvTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerInParent="true"
+                android:text="?? Admin Panel"
+                android:textColor="@color/white"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <!-- Refresh dugme -->
+            <Button
+                android:id="@+id/btnRefresh"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:background="@drawable/button_dark_blue"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="8dp"
+                android:text="??"
+                android:textColor="@color/white"
+                android:textSize="16sp" />
+
+        </RelativeLayout>
+    </com.google.android.material.appbar.MaterialToolbar>
+
+    <!-- Statistika dugme ispod toolbara -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="16dp">
+        android:gravity="center"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="16dp"
+        android:paddingHorizontal="16dp">
 
         <Button
-            android:id="@+id/btnBack"
+            android:id="@+id/btnStatistics"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="? Nazad"
+            android:layout_marginEnd="8dp"
             android:background="@drawable/button_dark_blue"
-            android:textColor="@color/white" />
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="12dp"
+            android:text="?? Statistika"
+            android:textColor="@color/white"
+            android:textSize="14sp" />
 
         <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="?? Admin Panel"
-            android:textSize="20sp"
-            android:textColor="@color/white"
-            android:gravity="center"
-            android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/btnRefresh"
+            android:id="@+id/tvUserCount"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="??"
-            android:background="@drawable/button_dark_blue"
-            android:textColor="@color/white" />
+            android:background="@drawable/rounded_bg_blue"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="12dp"
+            android:text="?? 0 korisnika"
+            android:textColor="@color/white"
+            android:textSize="14sp" />
 
     </LinearLayout>
-
-    <!-- User Count -->
-    <TextView
-        android:id="@+id/tvUserCount"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Ukupno korisnika: 0"
-        android:textColor="@color/white"
-        android:textSize="16sp"
-        android:layout_marginBottom="16dp"
-        android:gravity="center" />
 
     <!-- Users List -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvUsers"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_weight="1"
+        android:layout_marginTop="8dp"
+        android:background="@color/white"
+        android:padding="4dp" />
 
 </LinearLayout>
 
@@ -11260,55 +11819,6 @@ FILE: app\src\main\res\layout\activity_main.xml
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Minimal Top Bar -->
-    <LinearLayout
-        android:id="@+id/topBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_alignParentTop="true"
-        android:layout_margin="12dp"
-        android:orientation="horizontal"
-        android:paddingHorizontal="8dp"
-        android:paddingVertical="6dp">
-
-        <!-- Menu Button -->
-        <ImageButton
-            android:id="@+id/btnMenu"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:src="@drawable/ic_menu_white"
-            android:background="@drawable/button_menu_accent"
-            android:contentDescription="Navigacioni meni"
-            android:padding="12dp" />
-
-        <!-- Spacer -->
-        <View
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
-
-        <!-- Map Type -->
-        <ImageButton
-            android:id="@+id/btnMapType"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="@drawable/button_transparent_round"
-            android:padding="8dp"
-            android:src="@drawable/ic_satellite"
-            android:layout_marginStart="4dp" />
-
-        <!-- Navigation -->
-        <ImageButton
-            android:id="@+id/btnNavigation"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="@drawable/button_transparent_round"
-            android:padding="8dp"
-            android:src="@drawable/ic_google_maps"
-            android:layout_marginStart="4dp" />
-
-    </LinearLayout>
-
     <!-- Modern Tracking Panel -->
     <androidx.cardview.widget.CardView
         android:id="@+id/trackingPanel"
@@ -11316,7 +11826,7 @@ FILE: app\src\main\res\layout\activity_main.xml
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
         android:layout_alignParentTop="true"
-        android:layout_marginTop="60dp"
+        android:layout_marginTop="16dp"
         android:visibility="gone"
         app:cardBackgroundColor="#E6101E2E"
         app:cardCornerRadius="20dp"
@@ -11524,133 +12034,172 @@ FILE: app\src\main\res\layout\activity_main.xml
             android:padding="10dp"
             android:src="@drawable/ic_zoom_out" />
 
-        <!-- Kompas -->
-        <ImageButton
-            android:id="@+id/btnCompass"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:layout_above="@+id/fabAddPoint"
-            android:layout_alignParentEnd="true"
-            android:layout_marginEnd="12dp"
-            android:layout_marginBottom="8dp"
-            android:background="@drawable/compass_background"
-            android:src="@drawable/ic_compass_white"
-            android:visibility="gone"
-            android:elevation="8dp" />
-
-        <!-- Pravi kompas -->
-
-        <!--<ImageView
-            android:id="@+id/compassView"
-            android:layout_width="60dp"
-            android:layout_height="60dp"
-            android:layout_alignParentTop="true"
-            android:layout_alignParentEnd="true"
-            android:layout_marginTop="80dp"
-            android:layout_marginEnd="12dp"
-            android:src="@drawable/compass_dial"
-            android:visibility="gone"
-            android:elevation="12dp" /> -->
-
-        <!-- Igla kompasa -->
+        <!-- Compass Needle - ispod Zoom Out -->
         <ImageView
             android:id="@+id/compassNeedle"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:layout_alignTop="@+id/compassView"
-            android:layout_alignBottom="@+id/compassView"
-            android:layout_alignStart="@+id/compassView"
-            android:layout_alignEnd="@+id/compassView"
+            android:layout_marginTop="4dp"
             android:src="@drawable/compass_needle"
             android:visibility="gone"
             android:elevation="13dp" />
+
     </LinearLayout>
 
+    <!-- Kompas -->
+    <ImageButton
+        android:id="@+id/btnCompass"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentEnd="true"
+        android:layout_marginTop="70dp"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/compass_background"
+        android:src="@drawable/ic_compass_white"
+        android:visibility="gone"
+        android:elevation="8dp" />
+
+    <!-- Dugme "Samo sebe" u donjem levom uglu -->
+    <Button
+        android:id="@+id/btnTrackingMode"
+        android:layout_width="wrap_content"
+        android:layout_height="32dp"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentStart="true"
+        android:layout_marginStart="10dp"
+        android:layout_marginBottom="10dp"
+        android:background="@drawable/button_rounded_rectangle"
+        android:text="?? Pratim sebe"
+        android:textColor="#FFFFFF"
+        android:textSize="11sp"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp" />
+
     <!-- Bottom Action Bar -->
-    <LinearLayout
+    <RelativeLayout
         android:id="@+id/bottomActionBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
-        android:layout_margin="16dp"
-        android:orientation="horizontal"
-        android:gravity="center">
+        android:layout_marginBottom="12dp"
+        android:paddingHorizontal="16dp">
 
-        <!-- Tracking Mode -->
-        <Button
-            android:id="@+id/btnTrackingMode"
+        <!-- Play i Stop dugmad u centru -->
+        <LinearLayout
             android:layout_width="wrap_content"
-            android:layout_height="40dp"
-            android:background="@drawable/button_transparent_round"
-            android:text="?? Samo sebe"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp" />
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:orientation="horizontal">
 
-        <!-- Start Tracking -->
-        <ImageButton
-            android:id="@+id/btnStartTracking"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            android:background="@drawable/button_green_round"
-            android:padding="14dp"
-            android:src="@drawable/ic_play"
-            android:layout_marginStart="12dp"
-            android:elevation="4dp" />
+            <!-- Start Tracking -->
+            <ImageButton
+                android:id="@+id/btnStartTracking"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/button_green_round"
+                android:padding="14dp"
+                android:src="@drawable/ic_play"
+                android:layout_marginEnd="12dp"
+                android:elevation="4dp" />
 
-        <!-- Stop Tracking -->
-        <ImageButton
-            android:id="@+id/btnStopTracking"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            android:background="@drawable/button_red_round"
-            android:padding="14dp"
-            android:src="@drawable/ic_stop"
-            android:layout_marginStart="12dp"
-            android:elevation="4dp"
-            android:enabled="false" />
+            <!-- Stop Tracking -->
+            <ImageButton
+                android:id="@+id/btnStopTracking"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/button_red_round"
+                android:padding="14dp"
+                android:src="@drawable/ic_stop"
+                android:elevation="4dp"
+                android:enabled="false" />
 
-        <!-- Saved Routes -->
+        </LinearLayout>
+
+        <!-- Saved Routes Button - desna strana -->
         <ImageButton
             android:id="@+id/btnSavedRoutes"
             android:layout_width="40dp"
             android:layout_height="40dp"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
             android:background="@drawable/button_transparent_round"
             android:padding="8dp"
-            android:src="@drawable/ic_list_white"
-            android:layout_marginStart="12dp" />
+            android:src="@drawable/ic_list_white" />
 
-    </LinearLayout>
+    </RelativeLayout>
+
+    <!-- Menu Button - gornji desni ugao -->
+    <ImageButton
+        android:id="@+id/btnMenu"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentEnd="true"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="12dp"
+        android:src="@drawable/ic_more_vert_white"
+        android:background="@drawable/button_transparent_round"
+        android:contentDescription="Navigacioni meni"
+        android:padding="8dp" />
+
+    <!-- Dostupni tipovi mape - gornji desni ugao ispod menija -->
+    <ImageButton
+        android:id="@+id/btnMapType"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_below="@+id/btnMenu"
+        android:layout_alignParentEnd="true"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/button_transparent_round"
+        android:padding="8dp"
+        android:src="@drawable/ic_satellite"
+        android:contentDescription="Tip mape" />
+
+    <!-- Google mape - gornji desni ugao ispod tipova mape -->
+    <ImageButton
+        android:id="@+id/btnNavigation"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_below="@+id/btnMapType"
+        android:layout_alignParentEnd="true"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/button_transparent_round"
+        android:padding="8dp"
+        android:src="@drawable/ic_google_maps"
+        android:contentDescription="Google mape" />
 
     <!-- My Location Button -->
     <ImageButton
         android:id="@+id/btnMyLocation"
-        android:layout_width="52dp"
-        android:layout_height="52dp"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
         android:layout_above="@+id/bottomActionBar"
         android:layout_alignParentEnd="true"
         android:layout_marginEnd="12dp"
         android:layout_marginBottom="12dp"
-        android:background="@drawable/button_blue_round"
+        android:background="@drawable/button_transparent_round"
         android:src="@drawable/ic_gps_fixed"
         android:padding="10dp"
-        android:tint="#FFFFFF"
+        app:tint="#FFFFFF"
         android:contentDescription="Moja lokacija"
         android:elevation="6dp" />
 
-    <!-- Add Point FAB -->
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
+    <!-- Add Point FAB - zamenjen sa ikonom ciodom -->
+    <ImageButton
         android:id="@+id/fabAddPoint"
-        android:layout_width="52dp"
-        android:layout_height="52dp"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
         android:layout_above="@+id/btnMyLocation"
         android:layout_alignParentEnd="true"
         android:layout_marginEnd="12dp"
-        android:layout_marginBottom="12dp"
-        android:backgroundTint="#FF4CAF50"
-        android:src="@drawable/ic_add_white"
-        app:tint="#FFFFFF"
+        android:layout_marginBottom="8dp"
+        android:background="@drawable/button_transparent_round"
+        android:src="@drawable/ic_my_location_red"
+        android:scaleType="center"
+        android:contentDescription="Dodaj taèku"
         android:elevation="6dp" />
 
     <!-- Map Orientation, Follow Location, Export & Reset Buttons (Leva strana) -->
@@ -11663,27 +12212,27 @@ FILE: app\src\main\res\layout\activity_main.xml
         android:layout_marginBottom="12dp"
         android:orientation="vertical">
 
-        <!-- Map Orientation Button (North/Follow) -->
+        <!-- Map Orientation Button (North/Follow) - promenjena ikona -->
         <ImageButton
             android:id="@+id/btnMapOrientation"
             android:layout_width="44dp"
             android:layout_height="44dp"
             android:background="@drawable/button_transparent_round"
             android:padding="10dp"
-            android:src="@drawable/ic_compass_white"
+            android:src="@drawable/ic_navigation_arrow"
             android:layout_marginBottom="8dp"
-            android:contentDescription="Orijentacija mape" />
+            android:contentDescription="Smer mape" />
 
-        <!-- Follow Location Button (Auto-follow On/Off) -->
+        <!-- Follow Location Button (Auto-follow On/Off) - promenjena ikona -->
         <ImageButton
             android:id="@+id/btnFollowLocation"
             android:layout_width="44dp"
             android:layout_height="44dp"
             android:background="@drawable/button_transparent_round"
             android:padding="10dp"
-            android:src="@drawable/ic_my_location"
+            android:src="@drawable/ic_radar_white"
             android:layout_marginBottom="8dp"
-            android:contentDescription="Praæenje lokacije" />
+            android:contentDescription="Auto praæenje" />
 
         <!-- Export Button -->
         <ImageButton
@@ -11715,7 +12264,6 @@ FILE: app\src\main\res\layout\activity_main.xml
             android:visibility="gone" />
 
     </LinearLayout>
-
 
 </RelativeLayout>
 

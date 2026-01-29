@@ -11,6 +11,9 @@ class RouteRepository(private val routeDao: RouteDao) {
         return route.id
     }
 
+    suspend fun deleteRoutePoints(routeId: String) {
+        routeDao.deleteRoutePoints(routeId)
+    }
     suspend fun updateRoute(route: Route) {
         routeDao.updateRoute(route)
     }

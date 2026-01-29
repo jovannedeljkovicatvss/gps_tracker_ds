@@ -85,9 +85,7 @@ class RoutesAdapter(
 
         // Status
         holder.tvStatus.text = if (route.isCompleted) "✅" else "🟡"
-        holder.tvStatus.setBackgroundColor(
-            if (route.isCompleted) 0xFF4048C9.toInt() else 0xFFFF9800.toInt()
-        )
+        holder.tvStatus.background = null
 
         // Distance
         val distanceKm = route.distance / 1000.0

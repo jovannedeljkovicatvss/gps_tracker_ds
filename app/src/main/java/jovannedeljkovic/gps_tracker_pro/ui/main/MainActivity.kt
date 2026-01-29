@@ -110,6 +110,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import android.app.Dialog
 import jovannedeljkovic.gps_tracker_pro.ui.adapter.PointsAdapter
+import jovannedeljkovic.gps_tracker_pro.ui.adapter.RoutesAdapter
 
 
 data class GpxFileInfo(
@@ -1712,6 +1713,7 @@ private fun checkButtonAvailability() {
             "🗺️ Offline Mape",
             "🛠️ Alatke",
             "🧭 Kompas",
+            "🗺️ Sačuvane rute",
             "🔄 Režim praćenja",
             "⚙️ Podešavanja",
             "👤 Admin Panel",
@@ -1725,16 +1727,136 @@ private fun checkButtonAvailability() {
                     0 -> showOfflineMapsDialog()
                     1 -> showToolsDialog()
                     2 -> toggleCompass()
-                    3 -> toggleTrackingMode()
-                    4 -> showSettings()
-                    5 -> showAdminLoginDialog()
-                    6 -> logout()
+                    3 -> showRoutesRecyclerViewDialog()
+                    4 -> toggleTrackingMode()
+                    5 -> showSettings()
+                    6 -> showAdminLoginDialog()
+                    7 -> logout()
                 }
             }
             .setNegativeButton("✖ Zatvori", null)
             .show()
     }
 
+    private fun showRoutesRecyclerViewDialog() {
+        if (savedRoutes.isEmpty()) {
+            Toast.makeText(this, "❌ Nema sačuvanih ruta", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val dialog = Dialog(this).apply {
+            setContentView(R.layout.dialog_routes_list)
+            window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            window?.setLayout(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        val recyclerView = dialog.findViewById<RecyclerView>(R.id.recyclerViewRoutes)
+        val tvRoutesCount = dialog.findViewById<TextView>(R.id.tvRoutesCount)
+        val statisticsContainer = dialog.findViewById<LinearLayout>(R.id.statisticsContainer)
+        val selectionContainer = dialog.findViewById<LinearLayout>(R.id.selectionContainer)
+        val tvTotalDistance = dialog.findViewById<TextView>(R.id.tvTotalDistance)
+        val tvTotalTime = dialog.findViewById<TextView>(R.id.tvTotalTime)
+        val btnMultiSelect = dialog.findViewById<Button>(R.id.btnMultiSelect)
+        val btnSelectAllRoutes = dialog.findViewById<Button>(R.id.btnSelectAllRoutes)
+        val btnDeleteSelectedRoutes = dialog.findViewById<Button>(R.id.btnDeleteSelectedRoutes)
+        val btnShowStats = dialog.findViewById<Button>(R.id.btnShowStats)
+        val btnExport = dialog.findViewById<Button>(R.id.btnExport)
+        val btnClose = dialog.findViewById<Button>(R.id.btnClose)
+
+        recyclerView.layoutManager = LinearLayoutManager(this)
+
+        lateinit var adapter: RoutesAdapter
+
+        adapter = RoutesAdapter(
+            routes = savedRoutes.sortedByDescending { it.startTime },
+            onRouteClick = { route: Route ->
+                if (!adapter.isMultiSelectMode()) {
+                    dialog.dismiss()
+                    showAdvancedRouteOptions(route)
+                }
+            },
+            onShowOnMap = { route: Route ->
+                dialog.dismiss()
+                displayRouteOnMap(route)
+            },
+            onExportRoute = { route: Route ->
+                dialog.dismiss()
+                Toast.makeText(this, "📤 Izvoz rute: ${route.name}", Toast.LENGTH_SHORT).show()
+            },
+            onDeleteRoute = { route: Route ->
+                if (!adapter.isMultiSelectMode()) {
+                    dialog.dismiss()
+                    deleteRoute(route)
+                }
+            }
+        )
+
+        recyclerView.adapter = adapter
+        tvRoutesCount.text = "${savedRoutes.size} ruta"
+
+        // Multi-select toggle
+        var multiSelectMode = false
+        btnMultiSelect.setOnClickListener {
+            multiSelectMode = !multiSelectMode
+            adapter.setMultiSelectMode(multiSelectMode)
+            selectionContainer.visibility = if (multiSelectMode) View.VISIBLE else View.GONE
+            btnMultiSelect.text = if (multiSelectMode) "✗ Završi izbor" else "✓ Višestruki izbor"
+            btnMultiSelect.setBackgroundColor(
+                if (multiSelectMode) Color.parseColor("#FFEBEE") else Color.parseColor("#E3F2FD")
+            )
+        }
+
+        // Select all routes
+        var allRoutesSelected = false
+        btnSelectAllRoutes.setOnClickListener {
+            allRoutesSelected = !allRoutesSelected
+            adapter.selectAll(allRoutesSelected)
+            btnSelectAllRoutes.text = if (allRoutesSelected) "✗ Deselektuj sve" else "☑️ Selektuj sve"
+        }
+
+        // Delete selected routes
+        btnDeleteSelectedRoutes.setOnClickListener {
+            val selectedRoutes = adapter.getSelectedRoutes()
+            if (selectedRoutes.isNotEmpty()) {
+                dialog.dismiss()
+                showBulkRoutesDeleteConfirmation(selectedRoutes)
+            } else {
+                Toast.makeText(this, "⚠️ Nijedna ruta nije selektovana", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // Statistics
+        var statsVisible = false
+        btnShowStats.setOnClickListener {
+            statsVisible = !statsVisible
+            statisticsContainer.visibility = if (statsVisible) View.VISIBLE else View.GONE
+            btnShowStats.text = if (statsVisible) "📊 Sakrij" else "📊 Statistika"
+
+            if (statsVisible) {
+                val totalDistance = savedRoutes.sumOf { it.distance }
+                val totalTime = savedRoutes.sumOf { it.duration } / 1000 / 60
+
+                tvTotalDistance.text = "Ukupna udaljenost: ${formatDistance(totalDistance)}"
+                tvTotalTime.text = "Ukupno vreme: ${totalTime} min"
+            }
+        }
+
+        // Export all
+        btnExport.setOnClickListener {
+            dialog.dismiss()
+            showExportRoutesOptions()
+        }
+
+        // Close
+        btnClose.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
     private fun showAdminLoginDialog() {
         val editText = EditText(this).apply {
             hint = "🔐 Unesite Admin secret key"
@@ -1834,7 +1956,7 @@ private fun checkButtonAvailability() {
             // 4. SAČUVANE RUTE
             binding.btnSavedRoutes.setOnClickListener {
                 Log.d("Click", "Sačuvane rute kliknut")
-                showSavedRoutes()
+                showRoutesRecyclerViewDialog()
             }
 
             // 5. ZOOM KONTROLE
@@ -5774,6 +5896,89 @@ private fun showPremiumRequiredDialog(featureName: String) {
         }
 
         btnCancel.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
+    private fun showAllRoutesDialog() {
+        if (savedRoutes.isEmpty()) {
+            Toast.makeText(this, "❌ Nema sačuvanih ruta", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val dialog = Dialog(this).apply {
+            setContentView(R.layout.dialog_routes_list)
+            window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            window?.setLayout(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        val recyclerView = dialog.findViewById<RecyclerView>(R.id.recyclerViewRoutes)
+        val tvRoutesCount = dialog.findViewById<TextView>(R.id.tvRoutesCount)
+        val statisticsContainer = dialog.findViewById<LinearLayout>(R.id.statisticsContainer)
+        val tvTotalDistance = dialog.findViewById<TextView>(R.id.tvTotalDistance)
+        val tvTotalTime = dialog.findViewById<TextView>(R.id.tvTotalTime)
+        val btnShowStats = dialog.findViewById<Button>(R.id.btnShowStats)
+        val btnExport = dialog.findViewById<Button>(R.id.btnExport)
+        val btnClose = dialog.findViewById<Button>(R.id.btnClose)
+
+        recyclerView.layoutManager = LinearLayoutManager(this)
+
+        val adapter = RoutesAdapter(
+            routes = savedRoutes.sortedByDescending { it.startTime },
+            onRouteClick = { route: Route ->
+                // Klik na rutu - prikaži detalje
+                dialog.dismiss()
+                showAdvancedRouteOptions(route)
+            },
+            onShowOnMap = { route: Route ->
+                // Prikaži na mapi
+                dialog.dismiss()
+                displayRouteOnMap(route)
+            },
+            onExportRoute = { route: Route ->
+                // Izvezi rutu
+                dialog.dismiss()
+                // Ovdje dodajte logiku za eksport pojedinačne rute
+                Toast.makeText(this, "📤 Izvoz rute: ${route.name}", Toast.LENGTH_SHORT).show()
+            },
+            onDeleteRoute = { route: Route ->
+                // Obriši rutu
+                dialog.dismiss()
+                deleteRoute(route)
+            }
+        )
+
+        recyclerView.adapter = adapter
+        tvRoutesCount.text = "${savedRoutes.size} ruta"
+
+        // Statistics
+        var statsVisible = false
+        btnShowStats.setOnClickListener {
+            statsVisible = !statsVisible
+            statisticsContainer.visibility = if (statsVisible) View.VISIBLE else View.GONE
+            btnShowStats.text = if (statsVisible) "📊 Sakrij" else "📊 Statistika"
+
+            if (statsVisible) {
+                val totalDistance = adapter.calculateTotalDistance()
+                val totalTime = adapter.calculateTotalTime() / 1000 / 60
+
+                tvTotalDistance.text = "Ukupna udaljenost: ${formatDistance(totalDistance)}"
+                tvTotalTime.text = "Ukupno vreme: ${totalTime} min"
+            }
+        }
+
+        // Export all
+        btnExport.setOnClickListener {
+            dialog.dismiss()
+            showExportRoutesOptions()
+        }
+
+        // Close
+        btnClose.setOnClickListener {
             dialog.dismiss()
         }
 

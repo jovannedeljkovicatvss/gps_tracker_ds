@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="4dp"
+    app:cardBackgroundColor="#FFFFFF"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="2dp"
+    app:contentPadding="4dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <CheckBox
+            android:id="@+id/checkbox"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:buttonTint="#2196F3"
+            android:visibility="gone" />
+
+        <!-- Route Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <ImageView
+                android:id="@+id/ivRouteIcon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginEnd="12dp"
+                android:src="@android:drawable/ic_dialog_map"
+                android:tint="#2196F3" />
+
+            <TextView
+                android:id="@+id/tvRouteName"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Naziv rute"
+                android:textColor="#212121"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@null"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp"
+                android:text="✅"
+                android:textColor="#1976D2"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <!-- Route Details -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="4dp">
+
+            <!-- Distance -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📏 Udaljenost"
+                    android:textColor="#757575"
+                    android:textSize="10sp" />
+
+                <TextView
+                    android:id="@+id/tvDistance"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0.0 km"
+                    android:textColor="#212121"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Time -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="⏱️ Vreme"
+                    android:textColor="#757575"
+                    android:textSize="10sp" />
+
+                <TextView
+                    android:id="@+id/tvTime"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0 min"
+                    android:textColor="#212121"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Date and Actions -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <!-- Date -->
+            <TextView
+                android:id="@+id/tvDate"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="01.01.2024 12:00"
+                android:textColor="#9E9E9E"
+                android:textSize="10sp" />
+
+            <!-- Action Buttons -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnShowOnMap"
+                    android:layout_width="wrap_content"
+                    android:layout_height="28dp"
+                    android:layout_marginEnd="4dp"
+                    android:background="#E3F2FD"
+                    android:text="🗺️"
+                    android:textColor="#1976D2"
+                    android:textSize="12sp"
+                    android:paddingHorizontal="8dp" />
+
+                <Button
+                    android:id="@+id/btnExportRoute"
+                    android:layout_width="wrap_content"
+                    android:layout_height="28dp"
+                    android:layout_marginEnd="4dp"
+                    android:background="#F5F5F5"
+                    android:text="📤"
+                    android:textColor="#757575"
+                    android:textSize="12sp"
+                    android:paddingHorizontal="8dp" />
+
+                <Button
+                    android:id="@+id/btnDeleteRoute"
+                    android:layout_width="wrap_content"
+                    android:layout_height="28dp"
+                    android:background="#FFEBEE"
+                    android:text="🗑️"
+                    android:textColor="#D32F2F"
+                    android:textSize="12sp"
+                    android:paddingHorizontal="8dp" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</androidx.cardview.widget.CardView>

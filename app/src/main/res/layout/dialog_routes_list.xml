@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="#F8FAFF"
+    android:padding="8dp">
+
+    <!-- Dialog Title -->
+    <TextView
+        android:id="@+id/tvDialogTitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:text="🗺️ Sve Rute"
+        android:textColor="#1A237E"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Counter -->
+    <TextView
+        android:id="@+id/tvRoutesCount"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:background="#E3F2FD"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="4dp"
+        android:text="0 ruta"
+        android:textColor="#1565C0"
+        android:textSize="12sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Divider -->
+    <View
+        android:id="@+id/divider"
+        android:layout_width="0dp"
+        android:layout_height="1dp"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="8dp"
+        android:background="#90CAF9"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvDialogTitle" />
+
+    <!-- RecyclerView -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerViewRoutes"
+        android:layout_width="0dp"
+        android:layout_height="350dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:padding="4dp"
+        android:background="#FFFFFF"
+        android:clipToPadding="false"
+        app:layout_constraintBottom_toTopOf="@id/statisticsContainer"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/divider" />
+
+    <!-- Statistics -->
+    <LinearLayout
+        android:id="@+id/statisticsContainer"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="16dp"
+        android:orientation="vertical"
+        android:background="#E8F5E9"
+        android:padding="12dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/buttonContainer"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/recyclerViewRoutes">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📊 Statistika:"
+            android:textColor="#2E7D32"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp"/>
+
+        <TextView
+            android:id="@+id/tvTotalDistance"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Ukupna udaljenost: 0 km"
+            android:textColor="#388E3C"
+            android:textSize="12sp"/>
+
+        <TextView
+            android:id="@+id/tvTotalTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Ukupno vreme: 0 min"
+            android:textColor="#388E3C"
+            android:textSize="12sp"/>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/selectionContainer"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="16dp"
+        android:orientation="horizontal"
+        android:weightSum="2"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/buttonContainer"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <!-- Select All Routes -->
+        <Button
+            android:id="@+id/btnSelectAllRoutes"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:background="#E3F2FD"
+            android:text="☑️ Selektuj sve"
+            android:textColor="#0D47A1"
+            android:textSize="12sp" />
+
+        <!-- Delete Selected Routes -->
+        <Button
+            android:id="@+id/btnDeleteSelectedRoutes"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:background="#FFEBEE"
+            android:text="🗑️ Obriši selektovane"
+            android:textColor="#D32F2F"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- Button Container -->
+    <TableLayout
+        android:id="@+id/buttonContainer"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginBottom="16dp"
+        android:stretchColumns="*"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <TableRow
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:gravity="center">
+
+            <!-- Multi-select toggle -->
+            <Button
+                android:id="@+id/btnMultiSelect"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginEnd="2dp"
+                android:background="#E3F2FD"
+                android:text="✓ Višestruki izbor"
+                android:textColor="#0D47A1"
+                android:textSize="12sp" />
+
+            <!-- Show Statistics -->
+            <Button
+                android:id="@+id/btnShowStats"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginHorizontal="2dp"
+                android:background="#E3F2FD"
+                android:text="📊 Statistika"
+                android:textColor="#0D47A1"
+                android:textSize="12sp" />
+
+            <!-- Export Button -->
+            <Button
+                android:id="@+id/btnExport"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginHorizontal="2dp"
+                android:background="#F5F5F5"
+                android:text="📤 Izvezi"
+                android:textColor="#5A5A5A"
+                android:textSize="12sp" />
+
+            <!-- Close Button -->
+            <Button
+                android:id="@+id/btnClose"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="2dp"
+                android:background="#F5F5F5"
+                android:text="❌ Zatvori"
+                android:textColor="#5A5A5A"
+                android:textSize="12sp" />
+        </TableRow>
+    </TableLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

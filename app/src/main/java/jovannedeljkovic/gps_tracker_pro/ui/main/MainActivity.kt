@@ -106,6 +106,10 @@ import android.text.InputType
 import com.google.gson.reflect.TypeToken
 import org.json.JSONObject
 import java.lang.reflect.Type
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import android.app.Dialog
+import jovannedeljkovic.gps_tracker_pro.ui.adapter.PointsAdapter
 
 
 data class GpxFileInfo(
@@ -5705,44 +5709,75 @@ private fun showPremiumRequiredDialog(featureName: String) {
         }
     }
     private fun showPointsManagementDialog() {
-        // DODAJ OVO: OSVEŽI PODATKE PRE PRIKAZA
         loadPointsOfInterest()
 
         if (pointsOfInterest.isEmpty()) {
             Toast.makeText(this, "📭 Nema tačaka za upravljanje", Toast.LENGTH_SHORT).show()
             return
         }
-        if (pointsOfInterest.isEmpty()) {
-            Toast.makeText(this, "Nema tačaka za upravljanje", Toast.LENGTH_SHORT).show()
-            return
+
+        val dialog = Dialog(this).apply {
+            setContentView(R.layout.dialog_points_list)
+            window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            window?.setLayout(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
         }
 
-        val pointNames = pointsOfInterest.map {
-            "${it.name}\n   📅 ${SimpleDateFormat("dd.MM. HH:mm", Locale.getDefault()).format(Date(it.createdAt))}"
-        }.toTypedArray()
+        val recyclerView = dialog.findViewById<RecyclerView>(R.id.recyclerViewPoints)
+        val tvPointsCount = dialog.findViewById<TextView>(R.id.tvPointsCount)
+        val btnSelectAll = dialog.findViewById<Button>(R.id.btnSelectAll)
+        val btnDeleteSelected = dialog.findViewById<Button>(R.id.btnDeleteSelected)
+        val btnCancel = dialog.findViewById<Button>(R.id.btnCancel)
 
-        val selectedPoints = BooleanArray(pointsOfInterest.size) { false }
+        recyclerView.layoutManager = LinearLayoutManager(this)
 
-        AlertDialog.Builder(this)
-            .setTitle("Upravljanje tačkama (${pointsOfInterest.size})")
-            .setMultiChoiceItems(pointNames, selectedPoints) { dialog, which, isChecked ->
-                selectedPoints[which] = isChecked
+        // Kreiram adapter sa posebnom logikom za brojanje selektovanih
+        var selectedCount = 0
+
+        val adapter = PointsAdapter(
+            points = pointsOfInterest,
+            onItemClick = { point: PointOfInterest ->
+                dialog.dismiss()
+                showPointOptionsDialog(point.id, point.name, GeoPoint(point.latitude, point.longitude))
+            },
+            onCheckboxChange = { position: Int, isChecked: Boolean ->
+                // Ažuriraj brojač direktno
+                selectedCount = if (isChecked) selectedCount + 1 else selectedCount - 1
+                tvPointsCount.text = "$selectedCount/${pointsOfInterest.size} selektovano"
             }
-            .setPositiveButton("🗑️ Obriši selektovane") { dialog, which ->
-                val pointsToDelete = pointsOfInterest.filterIndexed { index, _ ->
-                    selectedPoints[index]
-                }
-                if (pointsToDelete.isNotEmpty()) {
-                    showBulkDeleteConfirmation(pointsToDelete)
-                } else {
-                    Toast.makeText(this, "Nijedna tačka nije selektovana", Toast.LENGTH_SHORT).show()
-                }
+        )
+
+        recyclerView.adapter = adapter
+        tvPointsCount.text = "0/${pointsOfInterest.size} selektovano"
+
+        var allSelected = false
+        btnSelectAll.setOnClickListener {
+            allSelected = !allSelected
+            adapter.selectAll(allSelected)
+            btnSelectAll.text = if (allSelected) "❌ Deselektuj sve" else "☑️ Selektuj sve"
+
+            // Ažuriraj brojač
+            selectedCount = if (allSelected) pointsOfInterest.size else 0
+            tvPointsCount.text = "$selectedCount/${pointsOfInterest.size} selektovano"
+        }
+
+        btnDeleteSelected.setOnClickListener {
+            val selectedPoints = adapter.getSelectedPoints()
+            if (selectedPoints.isNotEmpty()) {
+                dialog.dismiss()
+                showBulkDeleteConfirmation(selectedPoints)
+            } else {
+                Toast.makeText(this, "⚠️ Nijedna tačka nije selektovana", Toast.LENGTH_SHORT).show()
             }
-            .setNeutralButton("👁️ Pregledaj sve") { dialog, which ->
-                showAllPointsPreview()
-            }
-            .setNegativeButton("❌ Zatvori", null)
-            .show()
+        }
+
+        btnCancel.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
     }
     private fun showBulkDeleteConfirmation(pointsToDelete: List<PointOfInterest>) {
         val pointsList = pointsToDelete.joinToString("\n") { "📍 ${it.name}" }

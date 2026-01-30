@@ -5,14 +5,10 @@ import android.content.ClipboardManager
 import android.content.ClipData
 import android.location.Location
 import androidx.annotation.RequiresApi
-import kotlin.math.*
-
-import com.google.android.material.button.MaterialButton
-import org.osmdroid.tileprovider.MapTileProviderBase
+import jovannedeljkovic.gps_tracker_pro.data.model.OfflineMapItem
 import org.osmdroid.util.MapTileIndex
 import android.view.Gravity
 import android.view.ViewGroup
-import android.provider.Settings
 import jovannedeljkovic.gps_tracker_pro.utils.AdminManager
 import jovannedeljkovic.gps_tracker_pro.ui.admin.AdminActivity
 import android.graphics.drawable.ColorDrawable
@@ -29,7 +25,6 @@ import kotlinx.coroutines.delay
 import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.config.Configuration
-import android.graphics.drawable.BitmapDrawable
 import java.util.*
 import kotlinx.coroutines.launch
 import androidx.activity.OnBackPressedCallback
@@ -81,14 +76,9 @@ import kotlin.math.sqrt
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import com.google.gson.Gson
-import org.osmdroid.util.BoundingBox
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.delay
 import jovannedeljkovic.gps_tracker_pro.App
 import jovannedeljkovic.gps_tracker_pro.data.entities.User
 import jovannedeljkovic.gps_tracker_pro.utils.FeatureManager
-import kotlinx.coroutines.launch
 import android.widget.LinearLayout
 import android.widget.Button
 import android.hardware.Sensor
@@ -97,9 +87,6 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.content.BroadcastReceiver
 import android.app.Activity
-import java.util.*
-import android.content.ActivityNotFoundException // DODAJ OVO
-import java.nio.charset.Charset // DODAJ OVO
 import android.content.ContentUris
 import android.provider.MediaStore
 import android.text.InputType
@@ -111,6 +98,21 @@ import androidx.recyclerview.widget.RecyclerView
 import android.app.Dialog
 import jovannedeljkovic.gps_tracker_pro.ui.adapter.PointsAdapter
 import jovannedeljkovic.gps_tracker_pro.ui.adapter.RoutesAdapter
+import jovannedeljkovic.gps_tracker_pro.ui.adapter.OfflineMapsAdapter
+import kotlin.math.*
+import com.google.android.material.button.MaterialButton
+import org.osmdroid.tileprovider.MapTileProviderBase
+import android.provider.Settings
+import android.graphics.drawable.BitmapDrawable
+import java.util.*
+import android.content.ActivityNotFoundException
+import java.nio.charset.Charset
+import org.osmdroid.util.BoundingBox
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
 
 
 data class GpxFileInfo(
@@ -3873,7 +3875,7 @@ private fun showPremiumRequiredDialog(featureName: String) {
     private fun showOfflineMapsDialog() {
         val options = arrayOf(
             "📥 Preuzmi Offline Mapu (Srbija)",
-            "📂 Pregled Offline Mapama",
+            "📂 Pregled Offline Mapa",
             "🗑️ Obriši Offline Mape",
             "ℹ️ Informacije o Offline Mapama"
         )
@@ -4632,48 +4634,80 @@ private fun showPremiumRequiredDialog(featureName: String) {
             return
         }
 
-        val regionNames = regionFiles.map { file ->
+        // Kreiraj custom dijalog
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_offline_maps, null)
+
+        val recyclerView = dialogView.findViewById<RecyclerView>(R.id.recyclerViewOfflineMaps)
+        val tvTitle = dialogView.findViewById<TextView>(R.id.tvDialogTitle)
+        val btnDownloadNew = dialogView.findViewById<Button>(R.id.btnDownloadNew)
+        val btnClose = dialogView.findViewById<Button>(R.id.btnClose)
+        val tvNoMaps = dialogView.findViewById<TextView>(R.id.tvNoMaps)
+
+        tvTitle.text = "🗺️ Offline Mape"
+
+        // Kreiraj listu offline mapa
+        val offlineMaps = regionFiles.mapNotNull { file ->
             try {
                 val metadata = Gson().fromJson(file.readText(), Map::class.java)
                 val tileCount = metadata["tileCount"] as? Int ?: 0
                 val isSatellite = metadata["isSatellite"] as? Boolean ?: false
+                val regionName = metadata["regionName"] as? String ?: "Nepoznata mapa"
 
-                // ZAMENJENI ?? SA IKONAMA
-                if (isSatellite) {
-                    "🛰️ ${metadata["regionName"]} ($tileCount tile-ova)"
-                } else {
-                    "🗺️ ${metadata["regionName"]} ($tileCount tile-ova)"
-                }
+                OfflineMapItem(
+                    name = regionName,
+                    tileCount = tileCount,
+                    isSatellite = isSatellite,
+                    file = file,
+                    icon = if (isSatellite) "🛰️" else "🗺️"
+                )
             } catch (e: Exception) {
-                "❌ Nevažeća mapa"
+                null
             }
-        }.toTypedArray()
+        }
 
-        AlertDialog.Builder(this)
-            .setTitle("📂 Dostupne Offline Mape")
-            .setItems(regionNames) { dialog, which ->
-                val selectedFile = regionFiles[which]
-                try {
-                    val metadata = Gson().fromJson(selectedFile.readText(), Map::class.java)
-                    val regionName = metadata["regionName"] as String
-                    val isSatellite = metadata["isSatellite"] as? Boolean ?: false
+        if (offlineMaps.isEmpty()) {
+            Toast.makeText(this, "📭 Nema validnih offline mapa", Toast.LENGTH_LONG).show()
+            downloadOfflineMap()
+            return
+        }
 
-                    if (isSatellite) {
-                        enableSatelliteOfflineMode(regionName)
-                    } else {
-                        enableOfflineMode(regionName)
-                    }
-                } catch (e: Exception) {
-                    Toast.makeText(this, "❌ Greška pri učitavanju", Toast.LENGTH_SHORT).show()
-                }
+        recyclerView.layoutManager = LinearLayoutManager(this)
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+        val adapter = OfflineMapsAdapter(offlineMaps) { offlineMap ->
+            if (offlineMap.isSatellite) {
+                enableSatelliteOfflineMode(offlineMap.name)
+            } else {
+                enableOfflineMode(offlineMap.name)
             }
-            .setPositiveButton("📥 Preuzmi Novu") { dialog, which ->
-                downloadOfflineMap()
-            }
-            .setNegativeButton("❌ Zatvori", null)
-            .show()
+            dialog.dismiss()
+        }
+        recyclerView.adapter = adapter
+
+        btnDownloadNew.setOnClickListener {
+            dialog.dismiss()
+            downloadOfflineMap()
+        }
+
+        btnClose.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        if (offlineMaps.isEmpty()) {
+            recyclerView.visibility = View.GONE
+            tvNoMaps.visibility = View.VISIBLE
+        } else {
+            recyclerView.visibility = View.VISIBLE
+            tvNoMaps.visibility = View.GONE
+        }
+
+        dialog.show()
     }
-
     private fun deleteAllOfflineMaps() {
         AlertDialog.Builder(this)
             .setTitle("🗑️ Brisanje Svih Offline Mapa")

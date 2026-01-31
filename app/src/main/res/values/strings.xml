@@ -5,4 +5,6 @@
     <string name="distance_label">UDALJENOST</string>
     <string name="speed_label">BRZINA</string>
     <string name="searching_gps">Tražim GPS signal...</string>
+    <string name="app_logo">GPS Tracker Logo</string>
+
 </resources>

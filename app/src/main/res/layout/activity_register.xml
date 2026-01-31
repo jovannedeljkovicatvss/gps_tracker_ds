@@ -1,156 +1,231 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:padding="24dp"
-    android:background="@color/blue_light_background">
+    android:layout_height="match_parent">
 
-    <LinearLayout
+    <View
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:layout_height="match_parent"
+        android:background="@drawable/gradient_teal_background" />
 
-        // Header
-        <TextView
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:padding="24dp"
+        android:fillViewport="true">
+
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Registracija"
-            android:textSize="28sp"
-            android:textStyle="bold"
-            android:textColor="@color/blue_dark"
-            android:gravity="center"
-            android:layout_marginBottom="32dp"
-            android:layout_marginTop="20dp" />
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:gravity="center_horizontal">
 
-        // -- Ime -->
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            app:boxBackgroundMode="outline"
-            app:boxCornerRadiusBottomEnd="12dp"
-            app:boxCornerRadiusBottomStart="12dp"
-            app:boxCornerRadiusTopEnd="12dp"
-            app:boxCornerRadiusTopStart="12dp"
-            app:boxBackgroundColor="@android:color/white">
+            <!-- LOGO APLIKACIJE -->
+            <ImageView
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:src="@drawable/ic_app_logo"
+                android:contentDescription="Logo aplikacije"
+                android:layout_marginBottom="16dp"
+                android:layout_marginTop="10dp" />
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/etName"
+            <!-- NASLOV REGISTRACIJA -->
+            <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Ime i prezime"
-                android:inputType="textPersonName" />
+                android:text="Registracija"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:textColor="@android:color/white"
+                android:gravity="center"
+                android:layout_marginBottom="32dp" />
 
-        </com.google.android.material.textfield.TextInputLayout>
-
-        // -- Email -->
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            app:boxBackgroundMode="outline"
-            app:boxCornerRadiusBottomEnd="12dp"
-            app:boxCornerRadiusBottomStart="12dp"
-            app:boxCornerRadiusTopEnd="12dp"
-            app:boxCornerRadiusTopStart="12dp"
-            app:boxBackgroundColor="@android:color/white">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/etEmail"
+            <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Email"
-                android:inputType="textEmailAddress" />
+                android:layout_marginBottom="16dp"
+                app:boxBackgroundMode="outline"
+                app:boxCornerRadiusBottomEnd="16dp"
+                app:boxCornerRadiusBottomStart="16dp"
+                app:boxCornerRadiusTopEnd="16dp"
+                app:boxCornerRadiusTopStart="16dp"
+                app:boxBackgroundColor="@android:color/white"
+                app:hintTextColor="@android:color/white"
+                app:boxStrokeColor="@android:color/white"
+                app:endIconTint="@android:color/white"
+                app:startIconTint="@android:color/white"
+                app:startIconDrawable="@drawable/ic_person"
+                app:startIconCheckable="false">
 
-        </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etName"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Ime i prezime"
+                    android:inputType="textPersonName"
+                    android:textColor="@android:color/white"
+                    android:textColorHint="#CCFFFFFF"
+                    android:paddingStart="48dp" />
 
-        // -- Broj telefona -->
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            app:boxBackgroundMode="outline"
-            app:boxCornerRadiusBottomEnd="12dp"
-            app:boxCornerRadiusBottomStart="12dp"
-            app:boxCornerRadiusTopEnd="12dp"
-            app:boxCornerRadiusTopStart="12dp"
-            app:boxBackgroundColor="@android:color/white">
+            </com.google.android.material.textfield.TextInputLayout>
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/etPhone"
+            <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Broj telefona (opciono)"
-                android:inputType="phone" />
+                android:layout_marginBottom="16dp"
+                app:boxBackgroundMode="outline"
+                app:boxCornerRadiusBottomEnd="16dp"
+                app:boxCornerRadiusBottomStart="16dp"
+                app:boxCornerRadiusTopEnd="16dp"
+                app:boxCornerRadiusTopStart="16dp"
+                app:boxBackgroundColor="@android:color/white"
+                app:hintTextColor="@android:color/white"
+                app:boxStrokeColor="@android:color/white"
+                app:endIconTint="@android:color/white"
+                app:startIconTint="@android:color/white"
+                app:startIconDrawable="@drawable/ic_email"
+                app:startIconCheckable="false">
 
-        </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etEmail"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Email"
+                    android:inputType="textEmailAddress"
+                    android:textColor="@android:color/white"
+                    android:textColorHint="#CCFFFFFF"
+                    android:paddingStart="48dp" />
 
-        // -- Lozinka -->
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            app:boxBackgroundMode="outline"
-            app:boxCornerRadiusBottomEnd="12dp"
-            app:boxCornerRadiusBottomStart="12dp"
-            app:boxCornerRadiusTopEnd="12dp"
-            app:boxCornerRadiusTopStart="12dp"
-            app:boxBackgroundColor="@android:color/white">
+            </com.google.android.material.textfield.TextInputLayout>
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/etPassword"
+            <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Lozinka"
-                android:inputType="textPassword" />
+                android:layout_marginBottom="16dp"
+                app:boxBackgroundMode="outline"
+                app:boxCornerRadiusBottomEnd="16dp"
+                app:boxCornerRadiusBottomStart="16dp"
+                app:boxCornerRadiusTopEnd="16dp"
+                app:boxCornerRadiusTopStart="16dp"
+                app:boxBackgroundColor="@android:color/white"
+                app:hintTextColor="@android:color/white"
+                app:boxStrokeColor="@android:color/white"
+                app:endIconTint="@android:color/white"
+                app:startIconTint="@android:color/white"
+                app:startIconDrawable="@drawable/ic_phone"
+                app:startIconCheckable="false">
 
-        </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etPhone"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Broj telefona (opciono)"
+                    android:inputType="phone"
+                    android:textColor="@android:color/white"
+                    android:textColorHint="#CCFFFFFF"
+                    android:paddingStart="48dp" />
 
-        //
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="32dp"
-            app:boxBackgroundMode="outline"
-            app:boxCornerRadiusBottomEnd="12dp"
-            app:boxCornerRadiusBottomStart="12dp"
-            app:boxCornerRadiusTopEnd="12dp"
-            app:boxCornerRadiusTopStart="12dp"
-            app:boxBackgroundColor="@android:color/white">
+            </com.google.android.material.textfield.TextInputLayout>
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/etConfirmPassword"
+            <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Potvrdi lozinku"
-                android:inputType="textPassword" />
+                android:layout_marginBottom="16dp"
+                app:boxBackgroundMode="outline"
+                app:boxCornerRadiusBottomEnd="16dp"
+                app:boxCornerRadiusBottomStart="16dp"
+                app:boxCornerRadiusTopEnd="16dp"
+                app:boxCornerRadiusTopStart="16dp"
+                app:boxBackgroundColor="@android:color/white"
+                app:hintTextColor="@android:color/white"
+                app:boxStrokeColor="@android:color/white"
+                app:endIconTint="@android:color/white"
+                app:startIconTint="@android:color/white"
+                app:startIconDrawable="@drawable/ic_lock"
+                app:startIconCheckable="false"
+                app:passwordToggleEnabled="true"
+                app:passwordToggleTint="@android:color/white">
 
-        </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etPassword"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Lozinka"
+                    android:inputType="textPassword"
+                    android:textColor="@android:color/white"
+                    android:textColorHint="#CCFFFFFF"
+                    android:paddingStart="48dp" />
 
-        //
-        <Button
-            android:id="@+id/btnRegister"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Registruj se"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:background="@drawable/button_blue_rounded"
-            android:textColor="@android:color/white"
-            android:layout_marginBottom="24dp" />
+            </com.google.android.material.textfield.TextInputLayout>
 
-        //
-        <TextView
-            android:id="@+id/tvLoginLink"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Već imate nalog? Prijavite se"
-            android:textSize="14sp"
-            android:gravity="center"
-            android:textColor="@color/blue_dark"
-            android:clickable="true"
-            android:focusable="true" />
-    </LinearLayout>
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="32dp"
+                app:boxBackgroundMode="outline"
+                app:boxCornerRadiusBottomEnd="16dp"
+                app:boxCornerRadiusBottomStart="16dp"
+                app:boxCornerRadiusTopEnd="16dp"
+                app:boxCornerRadiusTopStart="16dp"
+                app:boxBackgroundColor="@android:color/white"
+                app:hintTextColor="@android:color/white"
+                app:boxStrokeColor="@android:color/white"
+                app:endIconTint="@android:color/white"
+                app:startIconTint="@android:color/white"
+                app:startIconDrawable="@drawable/ic_lock_check"
+                app:startIconCheckable="false"
+                app:passwordToggleEnabled="true"
+                app:passwordToggleTint="@android:color/white">
 
-</ScrollView>
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etConfirmPassword"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Potvrdi lozinku"
+                    android:inputType="textPassword"
+                    android:textColor="@android:color/white"
+                    android:textColorHint="#CCFFFFFF"
+                    android:paddingStart="48dp" />
+
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Button umesto MaterialButton -->
+            <Button
+                android:id="@+id/btnRegister"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:text="Registruj se"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:background="@drawable/button_white_rounded"
+                android:textColor="#008B8B"
+                android:layout_marginBottom="24dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:src="@drawable/ic_login"
+                    android:tint="@android:color/white"
+                    android:layout_marginEnd="8dp" />
+
+                <TextView
+                    android:id="@+id/tvLoginLink"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Već imate nalog? Prijavite se"
+                    android:textSize="15sp"
+                    android:textColor="@android:color/white" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+</FrameLayout>

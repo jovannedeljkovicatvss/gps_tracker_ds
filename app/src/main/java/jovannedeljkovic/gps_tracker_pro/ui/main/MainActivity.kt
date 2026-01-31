@@ -4133,8 +4133,109 @@ private fun showPremiumRequiredDialog(featureName: String) {
                     1 -> downloadRegionSerbiaSatellite()
                     2 -> downloadRegionBelgrade()
                     3 -> downloadRegionBelgradeSatellite()
-                    4 -> selectCustomRegion()  // OVO TREBA DA OTvori NOVI DIALOG
-                    5 -> downloadCurrentViewport()
+                    4 -> selectCustomRegion()
+                    5 -> downloadCurrentViewportWithZoomDialog()  // 👈 ISPRAVNO
+                }
+            }
+            .setNegativeButton("❌ Otkaži", null)
+            .show()
+    }
+    private fun downloadCurrentViewportWithZoomDialog() {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_zoom_selector, null)
+
+        val seekBarMin = dialogView.findViewById<SeekBar>(R.id.seekBarMinZoom)
+        val seekBarMax = dialogView.findViewById<SeekBar>(R.id.seekBarMaxZoom)
+        val tvMinZoom = dialogView.findViewById<TextView>(R.id.tvMinZoom)
+        val tvMaxZoom = dialogView.findViewById<TextView>(R.id.tvMaxZoom)
+       // val tvWarning = dialogView.findViewById<TextView>(R.id.tvWarning)
+
+        // Postavi početne vrednosti
+        seekBarMin.progress = 10
+        seekBarMax.progress = 14
+        tvMinZoom.text = "Min Zoom: 10"
+        tvMaxZoom.text = "Max Zoom: 14"
+
+        // Listeners za ažuriranje
+        seekBarMin.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                val minZoom = progress + 3 // od 3 do 19
+                tvMinZoom.text = "Min Zoom: $minZoom"
+
+                // Proveri da max ne bude manji od min + 2
+                if (seekBarMax.progress + 3 <= minZoom + 2) {
+                    seekBarMax.progress = minZoom + 2 - 3
+                }
+                //updateWarningText(minZoom, seekBarMax.progress + 3)
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar) {}
+        })
+
+        seekBarMax.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                val maxZoom = progress + 3 // od 3 do 19
+                tvMaxZoom.text = "Max Zoom: $maxZoom"
+
+                // Proveri da min ne bude veći od max - 2
+                if (seekBarMin.progress + 3 >= maxZoom - 2) {
+                    seekBarMin.progress = maxZoom - 2 - 3
+                }
+                //updateWarningText(seekBarMin.progress + 3, maxZoom)
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar) {}
+        })
+
+        AlertDialog.Builder(this)
+            .setTitle("📐 Izaberite zoom nivo")
+            .setView(dialogView)
+            .setPositiveButton("✅ Nastavi") { dialog, which ->
+                val minZoom = seekBarMin.progress + 3
+                val maxZoom = seekBarMax.progress + 3
+
+                if (maxZoom - minZoom < 2) {
+                    Toast.makeText(this, "❌ Razlika između min i max zooma mora biti najmanje 2!", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+
+                showMapTypeSelectionForCurrentViewport(minZoom, maxZoom)
+            }
+            .setNegativeButton("❌ Otkaži", null)
+            .show()
+    }
+
+    private fun updateWarningText(minZoom: Int, maxZoom: Int) {
+        val warningText = when {
+            maxZoom - minZoom < 2 -> "❌ Razlika mora biti najmanje 2"
+            maxZoom - minZoom > 8 -> "⚠️ Veliki broj tile-ova (>10k)"
+            else -> "✅ OK - razlika: ${maxZoom - minZoom}"
+        }
+        // tvWarning?.text = warningText // Ovo ćeš dodati ako imaš TextView u layout-u
+    }
+
+    private fun showMapTypeSelectionForCurrentViewport(minZoom: Int, maxZoom: Int) {
+        val options = arrayOf("🛰️ Satelitska", "🗺️ Standardna")
+
+        AlertDialog.Builder(this)
+            .setTitle("🗺️ Tip mape za preuzimanje")
+            .setItems(options) { dialog, which ->
+                val isSatellite = (which == 0)
+
+                // Provera za satelitske mape
+                if (isSatellite && maxZoom > 19) {
+                    AlertDialog.Builder(this)
+                        .setTitle("⚠️ Upozorenje")
+                        .setMessage("Satelitske mape podržavaju maksimalni zoom 19.\n\nŽelite li da:\n1. Smanjite max zoom na 19 (satelitska)\n2. Zadržite max zoom $maxZoom (standardna)")
+                        .setPositiveButton("🛰️ Satelitska (max 19)") { _, _ ->
+                            downloadCurrentViewport(minZoom, 19, isSatellite = true)
+                        }
+                        .setNeutralButton("🗺️ Standardna (max $maxZoom)") { _, _ ->
+                            downloadCurrentViewport(minZoom, maxZoom, isSatellite = false)
+                        }
+                        .setNegativeButton("❌ Otkaži", null)
+                        .show()
+                } else {
+                    downloadCurrentViewport(minZoom, maxZoom, isSatellite)
                 }
             }
             .setNegativeButton("❌ Otkaži", null)
@@ -5165,27 +5266,6 @@ private fun showPremiumRequiredDialog(featureName: String) {
         downloadTilesForRegion(bbox, 10, 16, "Nacionalni Parkovi")
     }
 
-    private fun downloadCurrentViewport(minZoom: Int = 12, maxZoom: Int = 14) {
-        val mapView = findViewById<org.osmdroid.views.MapView>(R.id.mapView)
-        val bbox = mapView.boundingBox
-
-        // Proverite da li je bbox validan
-        if (bbox == null) {
-            Toast.makeText(this, "❌ Nije moguće preuzeti prazno područje", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        // Proverite veličinu bounding box-a
-        val latDiff = Math.abs(bbox.latNorth - bbox.latSouth)
-        val lonDiff = Math.abs(bbox.lonEast - bbox.lonWest)
-
-        if (latDiff < 0.001 || lonDiff < 0.001) {  // Previše mali region
-            Toast.makeText(this, "❌ Region je previše mali. Zumirajte malo.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        showRegionNameDialog(bbox, minZoom, maxZoom, isSatellite = false)
-    }
 
     private fun showRegionNameDialog(bbox: org.osmdroid.util.BoundingBox, minZoom: Int, maxZoom: Int, isSatellite: Boolean) {
         val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_region_name, null)
@@ -6071,9 +6151,9 @@ private fun showPremiumRequiredDialog(featureName: String) {
             .setTitle("🔍 Nivo detalja")
             .setItems(zoomLevels) { dialog, which ->
                 when (which) {
-                    0 -> downloadCurrentViewportWithZoom(12, 14)  // Srednji
-                    1 -> downloadCurrentViewportWithZoom(15, 17)  // Visoki
-                    2 -> downloadCurrentViewportWithZoom(18, 20)  // Veoma visoki
+                    0 -> downloadCurrentViewportWithZoomDialog()  // 👈 ISPRAVNO
+                    1 -> downloadCurrentViewportWithZoomDialog()  // 👈 ISPRAVNO
+                    2 -> downloadCurrentViewportWithZoomDialog()  // 👈 ISPRAVNO
                     3 -> selectManualZoomLevels()                 // Ručno
                 }
             }
@@ -6081,12 +6161,7 @@ private fun showPremiumRequiredDialog(featureName: String) {
             .show()
     }
 
-    private fun selectCustomRegionWithZoom(minZoom: Int, maxZoom: Int) {
-        // Ovo treba da otvori mapu za izbor regiona
-        // Ako imate funkciju downloadCurrentViewport, promenite je da prihvata zoom parametre
 
-        downloadCurrentViewportWithZoom(minZoom, maxZoom)
-    }
 
     private fun selectManualZoomLevels() {
         // Koristite jednostavniji layout
@@ -6231,9 +6306,32 @@ private fun showPremiumRequiredDialog(featureName: String) {
                 .show()
         }
     }
-    private fun downloadCurrentViewportWithZoom(minZoom: Int, maxZoom: Int) {
-        // Pozovite postojeću funkciju sa zoom parametrima
-        downloadCurrentViewport(minZoom, maxZoom)
+    private fun downloadCurrentViewport(minZoom: Int = 12, maxZoom: Int = 14, isSatellite: Boolean = false) {
+        val mapView = findViewById<org.osmdroid.views.MapView>(R.id.mapView)
+        val bbox = mapView.boundingBox
+
+        if (bbox == null) {
+            Toast.makeText(this, "❌ Nije moguće preuzeti prazno područje", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val latDiff = Math.abs(bbox.latNorth - bbox.latSouth)
+        val lonDiff = Math.abs(bbox.lonEast - bbox.lonWest)
+
+        if (latDiff < 0.001 || lonDiff < 0.001) {
+            Toast.makeText(this, "❌ Region je previše mali. Zumirajte malo.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Provera za satelitske mape
+        val actualMaxZoom = if (isSatellite && maxZoom > 19) {
+            Toast.makeText(this, "⚠️ Satelitske mape max zoom: 19. Smanjeno na 19.", Toast.LENGTH_LONG).show()
+            19
+        } else {
+            maxZoom
+        }
+
+        showRegionNameDialog(bbox, minZoom, actualMaxZoom, isSatellite)
     }
 
     private fun updateZoomTexts(
@@ -6371,7 +6469,7 @@ private fun showPremiumRequiredDialog(featureName: String) {
             val regionFiles = metadataDir.listFiles { file -> file.name.endsWith(".json") }
 
             if (!metadataDir.exists() || regionFiles.isNullOrEmpty()) {
-                Toast.makeText(this, "?? Nema preuzetih offline mapa", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, " Nema preuzetih offline mapa", Toast.LENGTH_LONG).show()
                 downloadOfflineMap()
                 return
             }

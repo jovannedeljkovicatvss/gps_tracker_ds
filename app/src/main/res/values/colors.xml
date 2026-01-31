@@ -10,6 +10,23 @@
     <color name="text_secondary">#FFB3E5FC</color>    <!-- Svetlo plava -->
     <color name="card_dark">#FF1E88E5</color>         <!-- Plava za kartice -->
 
+    <!-- TEGET BOJE - BEZ DUPLIKATA -->
+    <color name="teal_primary">#008080</color>        <!-- Klasičan teget -->
+    <color name="teal_dark">#006666</color>           <!-- Tamniji teget -->
+    <color name="teal_light">#00A0A0</color>          <!-- Svetliji teget -->
+    <color name="teal_background">#008B8B</color>     <!-- DarkCyan -->
+    <color name="teal_background_light">#E0F2F1</color> <!-- Vrlo svetlo -->
+
+    <!-- GRADIENT TEGET BOJE - SAMO JEDAN PUT -->
+    <color name="teal_gradient_start">#008080</color>
+    <color name="teal_gradient_mid">#20B2AA</color>
+    <color name="teal_gradient_end">#004D4D</color>
+
+    <!-- Boje za tekst na gradientu -->
+    <color name="text_on_gradient">#FFFFFF</color>
+    <color name="text_secondary_gradient">#E6FFFFFF</color>
+    <color name="hint_on_gradient">#CCFFFFFF</color>
+
     <!-- Transparent Colors -->
     <color name="transparent_dark">#801E88E5</color>  <!-- Polu-transparentno plava -->
 
@@ -38,5 +55,4 @@
     <color name="modern_dark_blue">#FF1E2E3E</color>
     <color name="accent_orange">#FFFF9800</color>
     <color name="transparent_white">#88FFFFFF</color>
-
 </resources>

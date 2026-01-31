@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- Min Zoom -->
+    <TextView
+        android:id="@+id/tvMinZoom"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Min Zoom: 12"
+        android:textSize="14sp"
+        android:textColor="#212121"
+        android:layout_marginBottom="4dp" />
+
+    <SeekBar
+        android:id="@+id/seekBarMinZoom"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp" />
+
+    <!-- Max Zoom -->
+    <TextView
+        android:id="@+id/tvMaxZoom"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Max Zoom: 16"
+        android:textSize="14sp"
+        android:textColor="#212121"
+        android:layout_marginBottom="4dp" />
+
+    <SeekBar
+        android:id="@+id/seekBarMaxZoom"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="💡 Napomena: Satelitske mape podržavaju do zoom 19"
+        android:textSize="11sp"
+        android:textColor="#FF9800"
+        android:padding="8dp"
+        android:background="#FFF3E0"
+        android:layout_marginTop="8dp" />
+
+
+
+    <!-- Razlika nivoa -->
+    <TextView
+        android:id="@+id/tvDifference"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Razlika: 4 nivoa"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:padding="8dp"
+        android:layout_marginTop="8dp" />
+
+    <!-- Informacija o broju tile-ova -->
+    <TextView
+        android:id="@+id/tvTileEstimate"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Približan broj tile-ova: ~1000"
+        android:textSize="12sp"
+        android:textColor="#757575"
+        android:gravity="center"
+        android:padding="8dp"
+        android:background="#FFF3E0" />
+
+</LinearLayout>

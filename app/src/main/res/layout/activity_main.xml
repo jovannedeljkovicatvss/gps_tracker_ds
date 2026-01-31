@@ -11,6 +11,8 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+
+
     <!-- Modern Tracking Panel -->
     <androidx.cardview.widget.CardView
         android:id="@+id/trackingPanel"
@@ -268,6 +270,8 @@
         android:paddingStart="10dp"
         android:paddingEnd="10dp" />
 
+
+
     <!-- Bottom Action Bar -->
     <RelativeLayout
         android:id="@+id/bottomActionBar"
@@ -363,6 +367,22 @@
         android:src="@drawable/ic_google_maps"
         android:contentDescription="Google mape" />
 
+    <!-- Hybrid Mode Button - ispod Google Maps ikone -->
+    <ImageButton
+        android:id="@+id/btnToggleHybrid"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_below="@+id/btnNavigation"
+        android:layout_alignParentEnd="true"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/button_transparent_round"
+        android:padding="8dp"
+        android:src="@drawable/ic_layers"
+    android:contentDescription="Hibridni mod"
+    android:visibility="gone"
+    android:elevation="6dp" />
+
     <!-- My Location Button -->
     <ImageButton
         android:id="@+id/btnMyLocation"
@@ -378,6 +398,8 @@
         app:tint="#FFFFFF"
         android:contentDescription="Moja lokacija"
         android:elevation="6dp" />
+
+
 
     <!-- Add Point FAB - zamenjen sa ikonom ciodom -->
     <ImageButton

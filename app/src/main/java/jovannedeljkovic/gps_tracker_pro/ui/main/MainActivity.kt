@@ -100,6 +100,11 @@ import jovannedeljkovic.gps_tracker_pro.ui.adapter.PointsAdapter
 import jovannedeljkovic.gps_tracker_pro.ui.adapter.RoutesAdapter
 import jovannedeljkovic.gps_tracker_pro.ui.adapter.OfflineMapsAdapter
 import kotlin.math.*
+import android.widget.SeekBar
+import com.google.android.material.snackbar.Snackbar
+import android.view.Menu
+import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 import com.google.android.material.button.MaterialButton
 import org.osmdroid.tileprovider.MapTileProviderBase
 import android.provider.Settings
@@ -114,7 +119,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 
-
 data class GpxFileInfo(
     val id: Long,
     val name: String,
@@ -123,6 +127,14 @@ data class GpxFileInfo(
 )
 
 class MainActivity : AppCompatActivity() {
+
+    private lateinit var mapView: org.osmdroid.views.MapView
+
+
+    private var currentOfflineMapName: String? = null
+    private var currentOfflineMapMaxZoom: Int = 21
+    private var currentOfflineMapIsSatellite: Boolean = false
+
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -977,6 +989,19 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        mapView = findViewById(R.id.mapView)
+
+        mapView.setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
+
+        // Ili ako koristite DEFAULT, možda je ograničenje
+        // mapView.setTileSource(TileSourceFactory.DEFAULT_TILE_SOURCE)
+
+        // Postavi zoom ograničenje na veću vrednost
+        mapView.maxZoomLevel = 23.0
+        mapView.minZoomLevel = 3.0
+
+
+
         if (!::binding.isInitialized) {
             Log.e("MainActivity", "Binding nije uspešno inicijalizovan!")
             finish()
@@ -999,6 +1024,12 @@ class MainActivity : AppCompatActivity() {
         locationOverlay.enableFollowLocation()
         setupEnhancedMapConfiguration()
 
+        binding.btnToggleHybrid.setOnClickListener {
+            toggleHybridMode()
+        }
+        // Postavite dugme kao sakriveno na početku
+        binding.btnToggleHybrid.visibility = View.GONE
+
         initializeLocationClient()
         setupClickListeners()  // ILI safeButtonSetup() ako koristiš tu metodu
         setupPointOfInterestMode()
@@ -1009,6 +1040,7 @@ class MainActivity : AppCompatActivity() {
         checkBatteryOptimization()
         checkUserFeatures()
 
+        fixExistingSatelliteMaps()
         // DODAJ OVDE - POSLEDNJE PRE HANDLER-A:
         setupCompass()
         val filter = IntentFilter("LOCATION_UPDATE")
@@ -1021,6 +1053,108 @@ class MainActivity : AppCompatActivity() {
             getBestLocation()
         }, 2000)
     }
+
+        private fun addStamenTonerOverlay() {
+        try {
+            Log.d("HybridDebug", "Dodajem Stamen Toner overlay (tamniji)...")
+
+            removeStreetOverlay()
+
+            // STAMEN TONER - tamnije labele, bolje za satelit
+            val tonerSource = object : org.osmdroid.tileprovider.tilesource.XYTileSource(
+                "Stamen_Toner",
+                0,
+                18,
+                256,
+                ".png",
+                arrayOf(
+                    "https://stamen-tiles.a.ssl.fastly.net/toner/{z}/{x}/{y}.png"
+                )
+            ) {
+                override fun getTileURLString(pMapTileIndex: Long): String {
+                    val zoom = MapTileIndex.getZoom(pMapTileIndex)
+                    val x = MapTileIndex.getX(pMapTileIndex)
+                    val y = MapTileIndex.getY(pMapTileIndex)
+                    return "https://stamen-tiles.a.ssl.fastly.net/toner/$zoom/$x/$y.png"
+                }
+            }
+
+            streetOverlay = org.osmdroid.views.overlay.TilesOverlay(
+                org.osmdroid.tileprovider.MapTileProviderBasic(
+                    applicationContext,
+                    tonerSource
+                ),
+                applicationContext
+            )
+
+            // Postavi VEĆU TRANSPARENTNOST za Toner (jer je tamniji)
+            try {
+                val alphaField = streetOverlay!!::class.java.getDeclaredField("mAlpha")
+                alphaField.isAccessible = true
+                alphaField.set(streetOverlay, 0.4f) // 60% prozirno - Toner je tamniji
+            } catch (e: Exception) {
+                Log.w("HybridDebug", "Ne mogu postaviti alpha")
+            }
+
+            binding.mapView.overlays.add(streetOverlay)
+            binding.mapView.invalidate()
+
+            Log.d("HybridMode", "✅ Stamen Toner overlay dodat")
+            Toast.makeText(this, "🗺️ Tamne labele", Toast.LENGTH_SHORT).show()
+
+        } catch (e: Exception) {
+            Log.e("HybridMode", "❌ Stamen Toner greška: ${e.message}", e)
+
+            // Fallback na Toner Lite
+            addStamenTonerLiteOverlay()
+        }
+    }
+    private fun toggleHybridMode() {
+        try {
+            if (isHybridMode) {
+                // ISKLJUČI hibridni mod
+                removeStreetOverlay()
+                isHybridMode = false
+                binding.btnToggleHybrid.setBackgroundResource(R.drawable.button_transparent_round)
+                Toast.makeText(this, "🛰️ Samo satelitski prikaz", Toast.LENGTH_SHORT).show()
+            } else {
+
+
+                // Probajte redom:
+
+                //addSimpleDarkLabelsOverlay() //labele crne, dobre, ali sloj mnogo osvetljen
+
+                // addCustomLabelOverlay() // nije dobra
+                 addBlackLabelsOnlyOverlay() // Druga opcija
+                // addOSMCartoLabelsOverlay() // Treća opcija
+                //addStamenTonerOverlay() // Prvo probajte tamniji
+
+                // Ako ne radi, probajte drugu opciju
+                //addOSMCartoLabelsOverlay()
+                // UKLJUČI hibridni mod - PROBAJTE REDOM
+                // Prvo probajte Stamen Toner Lite (najbolje za samo labele)
+                //addStamenTonerLiteOverlay()
+
+                // Ako ne radi, probajte poboljšanu verziju
+                // addStreetLabelsOverlay()
+
+                // Ako ne radi ni to, probajte bele labele
+                // addWhiteLabelsOnBlackOverlay()
+
+                isHybridMode = true
+                binding.btnToggleHybrid.setBackgroundResource(R.drawable.button_modern_accent)
+            }
+
+            binding.mapView.invalidate()
+
+        } catch (e: Exception) {
+            Log.e("HybridMode", "Greška pri prebacivanju: ${e.message}", e)
+            Toast.makeText(this, "Greška: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private var isHybridMode = false
+    private var streetOverlay: org.osmdroid.views.overlay.TilesOverlay? = null
     private fun getMapView(): MapView? {
         return if (::binding.isInitialized && binding.mapView != null) {
             binding.mapView
@@ -1029,6 +1163,66 @@ class MainActivity : AppCompatActivity() {
             null
         }
     }
+
+    private fun setupZoomLimiter() {
+        mapView.addMapListener(object : org.osmdroid.events.MapListener {
+            override fun onScroll(event: org.osmdroid.events.ScrollEvent?): Boolean {
+                return false
+            }
+
+            override fun onZoom(event: org.osmdroid.events.ZoomEvent?): Boolean {
+                event?.let {
+                    val currentZoom = mapView.zoomLevelDouble
+
+                    // Proveri da li smo u offline modu
+                    if (!mapView.useDataConnection() && currentOfflineMapMaxZoom > 0) {
+                        if (currentZoom > currentOfflineMapMaxZoom) {
+                            // Blokiraj zoom iznad max
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                mapView.controller.setZoom(currentOfflineMapMaxZoom.toDouble())
+                                // Prikaži Toast umesto Snackbar
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "📏 Max zoom za offline: $currentOfflineMapMaxZoom",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }, 100)
+                            return true
+                        }
+                    }
+                }
+                return false
+            }
+        })
+    }
+
+
+
+    private fun enableOnlineMode() {
+        // Vrati na online mod
+        binding.mapView.setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
+        binding.mapView.setUseDataConnection(true)
+
+        // Resetuj offline varijable
+        currentOfflineMapName = null
+        currentOfflineMapMaxZoom = 21
+        currentOfflineMapIsSatellite = false
+
+        // Očisti cache
+        binding.mapView.tileProvider.clearTileCache()
+
+        // Sakrij dugme za hibridni mod
+        binding.btnToggleHybrid.visibility = View.GONE
+        isHybridMode = false
+        removeStreetOverlay()
+
+        // Osveži prikaz
+        binding.mapView.invalidate()
+
+        Toast.makeText(this, "🌐 Online mode", Toast.LENGTH_SHORT).show()
+    }
+
+
     private fun setupBackgroundLocationReceiver() {
         backgroundLocationReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
@@ -1237,7 +1431,7 @@ private fun checkButtonAvailability() {
             binding.mapView.apply {
                 setMultiTouchControls(true)
                 minZoomLevel = 3.0
-                maxZoomLevel = 22.0  // Povećan max zoom za više detalja
+                maxZoomLevel = 23.0  // Povećan max zoom za više detalja
                 setTilesScaledToDpi(true)
                 setUseDataConnection(true)
                 isHorizontalMapRepetitionEnabled = true
@@ -1426,45 +1620,72 @@ private fun checkButtonAvailability() {
     }
     private fun enableSatelliteOfflineMode(regionName: String) {
         try {
-            // PROVERITE DA LI POSTOJE PREUZETI TILE-OVI
-            val satelliteDir = File(Configuration.getInstance().osmdroidBasePath, "tiles/World_Imagery")
+            // KORISTITE generateUniqueFileName DA PRONAĐETE FAJL
+            val fileName = generateUniqueFileName(regionName, true)
+            val metadataDir = File(getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "offline_regions")
 
-            if (!satelliteDir.exists()) {
-                Toast.makeText(this, "❌ Nema preuzetih satelitskih tile-ova!", Toast.LENGTH_LONG).show()
-                return
+            // PRONAĐITE FAJL - KORISTITE var ZA metadataFile
+            var metadataFile = File(metadataDir, fileName)
+
+            // ALTERNATIVNO: Tražite bilo koji fajl koji sadrži regionName
+            if (!metadataFile.exists()) {
+                // Fallback: pronađite fajl po regionName-u
+                val matchingFiles = metadataDir.listFiles { file ->
+                    file.name.contains(regionName.replace(" ", "_"), ignoreCase = true) &&
+                            file.name.endsWith(".json")
+                }
+
+                if (!matchingFiles.isNullOrEmpty()) {
+                    metadataFile = matchingFiles.first()  // 👈 OVO JE OK SADA JER JE var
+                    Log.d("OfflineDebug", "Pronađen fajl po imenu: ${metadataFile.name}")
+                }
             }
 
-            // Prebrojite tile-ove za debug
-            val tileCount = countTilesInDirectory(satelliteDir)
-            Log.d("SatelliteOffline", "📊 Pronađeno $tileCount tile-ova u: ${satelliteDir.absolutePath}")
+            if (metadataFile.exists()) {
+                val metadata = Gson().fromJson(metadataFile.readText(), Map::class.java)
+                val isSatellite = metadata["isSatellite"] as? Boolean ?: false
 
-            if (tileCount == 0) {
-                Toast.makeText(this, "❌ Nema preuzetih satelitskih tile-ova!", Toast.LENGTH_LONG).show()
-                return
+                if (!isSatellite) {
+                    Toast.makeText(this, "❌ Ova mapa nije satelitska", Toast.LENGTH_SHORT).show()
+                    return
+                }
+
+                Log.d("SatelliteOffline", "🛰️ Aktiviranje satelitske offline mape: $regionName")
+
+                // Postavi satelitski tile source
+                binding.mapView.setTileSource(createSatelliteTileSource())
+                binding.mapView.setUseDataConnection(false)
+                binding.mapView.maxZoomLevel = 23.0
+
+                // Očisti cache za sigurnost
+                binding.mapView.tileProvider.clearTileCache()
+                binding.mapView.invalidate()
+
+                // Sačuvaj informacije o aktivnoj mapi
+                currentOfflineMapName = regionName
+                currentOfflineMapIsSatellite = true
+                currentOfflineMapMaxZoom = (metadata["maxZoom"] as? Number)?.toInt() ?: 19
+
+                // PRIKAŽI DUGME ZA HIBRIDNI MOD
+                binding.btnToggleHybrid.visibility = View.VISIBLE
+
+
+                // Resetuj hibridni mod
+                isHybridMode = false
+                removeStreetOverlay()
+
+                Toast.makeText(this, "🛰️ Satelitska offline: $regionName", Toast.LENGTH_SHORT).show()
+
+            } else {
+                Toast.makeText(this, "❌ Metadata fajl ne postoji: $fileName", Toast.LENGTH_SHORT).show()
+                Log.e("OfflineDebug", "Traženi fajl: $fileName, Postojeći fajlovi:")
+                metadataDir.listFiles()?.forEach { file ->
+                    Log.e("OfflineDebug", "  - ${file.name}")
+                }
             }
-
-            // KREIRAJ CUSTOM TILE SOURCE
-            val satelliteTileSource = createSatelliteTileSource()
-
-            // PODEŠAVANJA ZA OFFLINE MOD
-            binding.mapView.setTileSource(satelliteTileSource)
-            binding.mapView.setUseDataConnection(false) // ISKLJUČI INTERNET
-            binding.mapView.getTileProvider().clearTileCache()
-
-            // OSVEŽI PRIKAZ
-            binding.mapView.invalidate()
-            binding.mapView.postInvalidate()
-
-            // PRIKAŽI INFORMACIJE
-            binding.btnMapType.setBackgroundResource(R.drawable.button_dark_blue_accent)
-            Toast.makeText(this, "🛰️ Offline Satelitski: $regionName ($tileCount tile-ova)", Toast.LENGTH_LONG).show()
-
-            Log.d("SatelliteOffline", "✅ Offline satelitski mod aktiviran sa $tileCount tile-ova")
 
         } catch (e: Exception) {
-            Log.e("SatelliteOffline", "💥 Greška: ${e.message}")
             Toast.makeText(this, "❌ Greška: ${e.message}", Toast.LENGTH_SHORT).show()
-            setHighQualityStandardMap()
         }
     }
     private fun debugSatelliteTiles() {
@@ -3896,15 +4117,12 @@ private fun showPremiumRequiredDialog(featureName: String) {
 
     private fun downloadOfflineMap() {
         val regions = arrayOf(
-            "🗺️ Srbija - Standardna mapa",
-            "🛰️ Srbija - Satelitska mapa",  // 👈 DODAJ SATELITSKU OPCIJU
-            "🏙️ Beograd - Standardna mapa",
-            "🛰️ Beograd - Satelitska mapa", // 👈 DODAJ SATELITSKU OPCIJU
-            "🌆 Niš - Standardna mapa",
-            "🛰️ Niš - Satelitska mapa",     // 👈 DODAJ SATELITSKU OPCIJU
-            "🎯 Custom Region - izaberi tačno šta ti treba",
-            "🛰️ Trenutno vidljivo područje (Satelitska)",
-            "🗺️ Trenutno vidljivo područje (Standardna)"
+            "🗺️ Srbija (standardna)",
+            "🛰️ Srbija (satelitska)",
+            "🏙️ Beograd (standardna)",
+            "🛰️ Beograd (satelitska)",
+            "🎯 Custom Region - izaberi sam",
+            "📏 Trenutno vidljivo područje"
         )
 
         AlertDialog.Builder(this)
@@ -3912,13 +4130,11 @@ private fun showPremiumRequiredDialog(featureName: String) {
             .setItems(regions) { dialog, which ->
                 when (which) {
                     0 -> downloadRegionSerbia()
-                    1 -> downloadRegionSerbiaSatellite()  // 👈 NOVA METODA
+                    1 -> downloadRegionSerbiaSatellite()
                     2 -> downloadRegionBelgrade()
-                    3 -> downloadRegionBelgradeSatellite() // 👈 NOVA METODA
-                    4 -> downloadRegionNis()
-                    5 -> downloadRegionNisSatellite()     // 👈 NOVA METODA
-                    6 -> selectCustomRegion()
-                    7 -> downloadCurrentViewport()
+                    3 -> downloadRegionBelgradeSatellite()
+                    4 -> selectCustomRegion()  // OVO TREBA DA OTvori NOVI DIALOG
+                    5 -> downloadCurrentViewport()
                 }
             }
             .setNegativeButton("❌ Otkaži", null)
@@ -3926,7 +4142,56 @@ private fun showPremiumRequiredDialog(featureName: String) {
     }
     private fun downloadRegionSerbiaSatellite() {
         val bbox = org.osmdroid.util.BoundingBox(45.5, 21.0, 43.0, 19.0)
-        downloadSatelliteTilesForRegion(bbox, 8, 14, "Srbija Satelitska")
+
+        // KREIRAJTE PROGRESS DIALOG
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("🗺️ Preuzimanje: Srbija Satelitska")
+            .setMessage("Priprema tile-ova...")
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                var totalTiles = 0
+                var downloadedTiles = 0
+                val minZoom = 8
+                val maxZoom = 14
+
+                // IZRAČUNAJ UKUPAN BROJ TILE-OVA
+                for (zoom in minZoom..maxZoom) {
+                    totalTiles += calculateTilesForZoom(bbox, zoom)
+                }
+
+                withContext(Dispatchers.Main) {
+                    progressDialog.setMessage("Preuzimanje: Srbija Satelitska\n0/$totalTiles")
+                }
+
+                // PREUZIMANJE TILE-OVA
+                for (zoom in minZoom..maxZoom) {
+                    val downloaded = downloadSatelliteZoomLevel(bbox, zoom, "Srbija Satelitska", progressDialog, downloadedTiles, totalTiles)
+                    downloadedTiles += downloaded
+                }
+
+                // SAČUVAJ METAPODATKE
+                saveSatelliteRegionMetadata(bbox, minZoom, maxZoom, "Srbija Satelitska", downloadedTiles)
+
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(
+                        this@MainActivity,
+                        "✅ Preuzeto: Srbija Satelitska\n$downloadedTiles/$totalTiles tile-ova",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(this@MainActivity, "❌ Greška: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     private fun downloadRegionBelgradeSatellite() {
@@ -4112,12 +4377,26 @@ private fun showPremiumRequiredDialog(featureName: String) {
         }
     }*/
 
+    private fun checkCurrentTileSource() {
+        val tileSource = mapView.tileProvider.tileSource
+        val sourceName = tileSource.name()
+        val minZoom = tileSource.minimumZoomLevel
+        val maxZoom = tileSource.maximumZoomLevel
+
+        Toast.makeText(
+            this,
+            "Tile Source: $sourceName\nMin Zoom: $minZoom\nMax Zoom: $maxZoom",
+            Toast.LENGTH_LONG
+        ).show()
+
+        Log.d("TileSourceDebug", "Source: $sourceName, Min: $minZoom, Max: $maxZoom")
+    }
     private fun createSatelliteTileSource(): org.osmdroid.tileprovider.tilesource.ITileSource {
         return object : org.osmdroid.tileprovider.tilesource.XYTileSource(
             "World_Imagery",
-            0,
-            19,
-            256,
+            0,     // Min zoom - postavite na 0 ili 3
+            23,    // Max zoom - POVEĆAJTE OVO NA 21 ili 23!
+            256,   // Tile size
             ".png",
             arrayOf(
                 "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
@@ -4300,17 +4579,25 @@ private fun showPremiumRequiredDialog(featureName: String) {
     }
 
     private fun saveSatelliteRegionMetadata(bbox: org.osmdroid.util.BoundingBox, minZoom: Int, maxZoom: Int, regionName: String, tileCount: Int) {
+        // KORISTITE generateUniqueFileName
+        val fileName = generateUniqueFileName(regionName, true)
+
+        val safeMaxZoom = if (maxZoom > 19) 19 else maxZoom
+
         val metadata = mapOf(
             "regionName" to regionName,
+            "displayName" to regionName,
             "north" to bbox.latNorth,
             "south" to bbox.latSouth,
             "east" to bbox.lonEast,
             "west" to bbox.lonWest,
             "minZoom" to minZoom,
-            "maxZoom" to maxZoom,
+            "maxZoom" to safeMaxZoom,
             "tileCount" to tileCount,
-            "downloadDate" to System.currentTimeMillis(),
-            "isSatellite" to true  // OVO JE KLJUČNO!
+            "downloadDate" to System.currentTimeMillis(),  // 👈 DODAJTE OVO
+            "downloadDateFormatted" to SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date()), // 👈 I OVO
+            "isSatellite" to true,
+            "type" to "satellite"
         )
 
         val metadataDir = File(getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "offline_regions")
@@ -4318,12 +4605,485 @@ private fun showPremiumRequiredDialog(featureName: String) {
             metadataDir.mkdirs()
         }
 
-        val metadataFile = File(metadataDir, "${regionName.replace(" ", "_")}.json")
+        val metadataFile = File(metadataDir, fileName)
         metadataFile.writeText(Gson().toJson(metadata))
 
-        Log.d("SatelliteSave", "✅ Sačuvana satelitska mapa: $regionName, isSatellite: true")
+        Log.d("MetadataSave", "✅ Sačuvana satelitska mapa: $fileName, datum: ${metadata["downloadDateFormatted"]}")
     }
 
+    private fun generateUniqueFileName(baseName: String, isSatellite: Boolean): String {
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val prefix = if (isSatellite) "SAT" else "STD"
+        val cleanName = baseName.replace("[^a-zA-Z0-9]".toRegex(), "_")
+
+        return "${prefix}_${cleanName}_${timestamp}.json"
+    }
+
+    // Koristite ovako:
+
+
+
+    private fun enableHybridMode(regionName: String) {
+        try {
+            // Učitaj satelitsku mapu
+            binding.mapView.setTileSource(createSatelliteTileSource())
+            binding.mapView.setUseDataConnection(false)
+
+            // DODAJTE OVERLAY ZA LABELE (ulice, imena)
+            addStreetLabelsOverlay()
+
+            Toast.makeText(this, "🛰️🗺️ Hibridni prikaz: $regionName", Toast.LENGTH_SHORT).show()
+
+        } catch (e: Exception) {
+            Toast.makeText(this, "❌ Greška: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun addStreetLabelsOverlay() {
+        try {
+            // KORISTITE "LABELS ONLY" TILE SOURCE
+            val labelsOnlyTileSource = object : org.osmdroid.tileprovider.tilesource.XYTileSource(
+                "ArcGIS_LabelsOnly",
+                0,
+                19,
+                256,
+                ".png",
+                arrayOf(
+                    "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+                )
+            ) {
+                override fun getTileURLString(pMapTileIndex: Long): String {
+                    val zoom = MapTileIndex.getZoom(pMapTileIndex)
+                    val x = MapTileIndex.getX(pMapTileIndex)
+                    val y = MapTileIndex.getY(pMapTileIndex)
+                    return "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/$zoom/$y/$x"
+                }
+            }
+
+            // Kreiraj overlay sa ovim source-om
+            streetOverlay = org.osmdroid.views.overlay.TilesOverlay(
+                org.osmdroid.tileprovider.MapTileProviderBasic(
+                    applicationContext,
+                    labelsOnlyTileSource
+                ),
+                applicationContext
+            )
+
+            // POSTAVI VISOKU TRANSPARENTNOST ZA POZADINU (ako ima)
+            try {
+                val alphaField = streetOverlay!!::class.java.getDeclaredField("mAlpha")
+                alphaField.isAccessible = true
+                alphaField.set(streetOverlay, 1.0f) // 👈 1.0 = potpuno neprozirne labele
+            } catch (e: Exception) {
+                // Ignoriši ako ne može
+            }
+
+            // Dodaj overlay
+            binding.mapView.overlays.add(streetOverlay)
+            binding.mapView.invalidate()
+
+            Log.d("HybridMode", "✅ Labels-only overlay dodat")
+            Toast.makeText(this, "🗺️ Samo imena ulica", Toast.LENGTH_SHORT).show()
+
+        } catch (e: Exception) {
+            Log.e("HybridMode", "❌ Greška: ${e.message}", e)
+
+            // FALLBACK: Probajte drugi servis
+            tryFallbackLabelsOverlay()
+        }
+    }
+    private fun addStamenTonerLiteOverlay() {
+        try {
+            Log.d("HybridDebug", "Dodajem Stamen overlay...")
+
+            // Prvo uklonite postojeći ako postoji
+            removeStreetOverlay()
+
+            // STAMEN TONER LITE - crno-bele labele na transparentnoj pozadini
+            val tonerLiteSource = object : org.osmdroid.tileprovider.tilesource.XYTileSource(
+                "Stamen_Toner_Lite",
+                0,
+                18,
+                256,
+                ".png",
+                arrayOf(
+                    "https://stamen-tiles.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}.png"
+                )
+            ) {
+                override fun getTileURLString(pMapTileIndex: Long): String {
+                    val zoom = MapTileIndex.getZoom(pMapTileIndex)
+                    val x = MapTileIndex.getX(pMapTileIndex)
+                    val y = MapTileIndex.getY(pMapTileIndex)
+                    return "https://stamen-tiles.a.ssl.fastly.net/toner-lite/$zoom/$x/$y.png"
+                }
+            }
+
+            streetOverlay = org.osmdroid.views.overlay.TilesOverlay(
+                org.osmdroid.tileprovider.MapTileProviderBasic(
+                    applicationContext,
+                    tonerLiteSource
+                ),
+                applicationContext
+            )
+
+            // Postavi transparentnost
+            try {
+                val alphaField = streetOverlay!!::class.java.getDeclaredField("mAlpha")
+                alphaField.isAccessible = true
+                alphaField.set(streetOverlay, 0.7f) // 30% prozirno
+            } catch (e: Exception) {
+                Log.w("HybridDebug", "Ne mogu postaviti alpha: ${e.message}")
+            }
+
+            // DODAJTE OVERLAY NA KRAJ LISTE (da bude iznad satelitskih tile-ova)
+            binding.mapView.overlays.add(streetOverlay)
+
+            Log.d("HybridDebug", "Overlay dodat. Ukupno overlay-a: ${binding.mapView.overlays.size}")
+
+            // Invalirajte mapu
+            binding.mapView.invalidate()
+
+            Log.d("HybridMode", "✅ Stamen Toner Lite overlay dodat")
+            Toast.makeText(this, "🗺️ Crno-bele labele", Toast.LENGTH_SHORT).show()
+
+        } catch (e: Exception) {
+            Log.e("HybridMode", "❌ Stamen greška: ${e.message}", e)
+            Toast.makeText(this, "❌ Stamen ne radi: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun addOSMCartoLabelsOverlay() {
+        try {
+            Log.d("HybridDebug", "Dodajem OSM Carto labels overlay...")
+
+            removeStreetOverlay()
+
+            // OpenStreetMap Carto
+            val osmSource = org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK
+
+            streetOverlay = object : org.osmdroid.views.overlay.TilesOverlay(
+                org.osmdroid.tileprovider.MapTileProviderBasic(
+                    applicationContext,
+                    osmSource
+                ),
+                applicationContext
+            ) {
+                // ColorMatrix koji čuva samo CRNE (labele) a belu pozadinu čini prozirnom
+                private val labelFilter = android.graphics.ColorMatrixColorFilter(
+                    android.graphics.ColorMatrix().apply {
+                        // OVAJ FILTER:
+                        // 1. Bela pozadina (RGB ≈ 255,255,255) postaje potpuno prozirna
+                        // 2. Crne labele (RGB ≈ 0,0,0) ostaju crne
+                        // 3. Ostale boje (zelene, plave itd) se konvertuju u sive nijanse
+
+                        // Prvo pretvorimo u crno-belo
+                        setSaturation(0f)
+
+                        // Zatim podesimo kontrast da naglasimo labele
+                        val contrast = 2.0f
+                        val scale = contrast
+                        val translate = (-0.5f * contrast + 0.5f) * 255f
+
+                        val contrastMatrix = floatArrayOf(
+                            scale, 0f, 0f, 0f, translate,
+                            0f, scale, 0f, 0f, translate,
+                            0f, 0f, scale, 0f, translate,
+                            0f, 0f, 0f, 1f, 0f
+                        )
+
+                        postConcat(android.graphics.ColorMatrix(contrastMatrix))
+
+                        // Konačno: sve što je svetlo (pozadina) učini prozirnim
+                        // Sve što je tamno (labele) ostavi neprozirno
+                        val finalMatrix = floatArrayOf(
+                            1f, 0f, 0f, 0f, 0f,
+                            0f, 1f, 0f, 0f, 0f,
+                            0f, 0f, 1f, 0f, 0f,
+                            0f, 0f, 0f, 0.7f, 0f  // Alpha kanal: 0.7 = 30% prozirno
+                        )
+
+                        postConcat(android.graphics.ColorMatrix(finalMatrix))
+                    }
+                )
+
+                override fun draw(canvas: Canvas, mapView: MapView?, shadow: Boolean) {
+                    if (!shadow && mapView != null) {
+                        val saveCount = canvas.save()
+
+                        // Primeni filter koji čuva samo labele
+                        val paint = Paint()
+                        paint.colorFilter = labelFilter
+
+                        canvas.saveLayer(null, paint, Canvas.ALL_SAVE_FLAG)
+                        super.draw(canvas, mapView, shadow)
+                        canvas.restoreToCount(saveCount)
+                    }
+                }
+            }
+
+            binding.mapView.overlays.add(streetOverlay)
+            binding.mapView.invalidate()
+
+            Log.d("HybridMode", "✅ OSM Carto labels overlay dodat (selektivna transparentnost)")
+            Toast.makeText(this, "🗺️ Samo labele (bez pozadine)", Toast.LENGTH_SHORT).show()
+
+        } catch (e: Exception) {
+            Log.e("HybridMode", "❌ OSM Carto greška: ${e.message}", e)
+            Toast.makeText(this, "❌ Greška sa labelama", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun addBlackLabelsOnlyOverlay() {
+        try {
+            Log.d("HybridDebug", "Dodajem Black Labels Only overlay...")
+
+            removeStreetOverlay()
+
+            val osmSource = org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK
+
+            streetOverlay = object : org.osmdroid.views.overlay.TilesOverlay(
+                org.osmdroid.tileprovider.MapTileProviderBasic(
+                    applicationContext,
+                    osmSource
+                ),
+                applicationContext
+            ) {
+                // Filter koji:
+                // 1. Uklanja sve boje (čini crno-belim)
+                // 2. Invertuje (crno->belo, belo->crno)
+                // 3. Onda invertuje nazad (da bela pozadina postane prozirna)
+                private val blackLabelsFilter = android.graphics.ColorMatrixColorFilter(
+                    android.graphics.ColorMatrix().apply {
+                        // Korak 1: Ukloni boje
+                        setSaturation(0f)
+
+                        // Korak 2: Invertuj (crno->belo, belo->crno)
+                        val invertMatrix = floatArrayOf(
+                            -1f, 0f, 0f, 0f, 255f,
+                            0f, -1f, 0f, 0f, 255f,
+                            0f, 0f, -1f, 0f, 255f,
+                            0f, 0f, 0f, 1f, 0f
+                        )
+                        postConcat(android.graphics.ColorMatrix(invertMatrix))
+
+                        // Korak 3: Postavi threshold - sve iznad 200 (bela) postaje prozirno
+                        // Ovo je pojednostavljeni threshold filter
+                        val threshold = 200f / 255f
+                        val thresholdMatrix = floatArrayOf(
+                            if (1f > threshold) 1f else 0f, 0f, 0f, 0f, 0f,
+                            0f, if (1f > threshold) 1f else 0f, 0f, 0f, 0f,
+                            0f, 0f, if (1f > threshold) 1f else 0f, 0f, 0f,
+                            0f, 0f, 0f, if (1f > threshold) 0.3f else 1f, 0f  // Alpha: belo=30%, crno=100%
+                        )
+                        postConcat(android.graphics.ColorMatrix(thresholdMatrix))
+                    }
+                )
+
+                override fun draw(canvas: Canvas, mapView: MapView?, shadow: Boolean) {
+                    if (!shadow && mapView != null) {
+                        val saveCount = canvas.save()
+
+                        val paint = Paint()
+                        paint.colorFilter = blackLabelsFilter
+
+                        canvas.saveLayer(null, paint, Canvas.ALL_SAVE_FLAG)
+                        super.draw(canvas, mapView, shadow)
+                        canvas.restoreToCount(saveCount)
+                    }
+                }
+            }
+
+            binding.mapView.overlays.add(streetOverlay)
+            binding.mapView.invalidate()
+
+            Log.d("HybridMode", "✅ Black labels only overlay dodat")
+            Toast.makeText(this, "🗺️ Crne labele", Toast.LENGTH_SHORT).show()
+
+        } catch (e: Exception) {
+            Log.e("HybridMode", "❌ Black labels greška: ${e.message}", e)
+            Toast.makeText(this, "❌ Greška", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun addCustomLabelOverlay() {
+        try {
+            removeStreetOverlay()
+
+            val osmSource = org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK
+
+            streetOverlay = object : org.osmdroid.views.overlay.TilesOverlay(
+                org.osmdroid.tileprovider.MapTileProviderBasic(
+                    applicationContext,
+                    osmSource
+                ),
+                applicationContext
+            ) {
+                private val shaderPaint = android.graphics.Paint().apply {
+                    // Koristimo PorterDuff mode da zadržimo samo tamne piksele
+                    xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DARKEN)
+                    alpha = 220 // 86% neprozirno - labele će biti malo prozirne
+                }
+
+                override fun draw(canvas: android.graphics.Canvas, mapView: MapView?, shadow: Boolean) {
+                    if (!shadow && mapView != null) {
+                        val saveCount = canvas.save()
+
+                        // Primeni shader koji čuva samo tamne delove (labele)
+                        canvas.saveLayer(null, shaderPaint, android.graphics.Canvas.ALL_SAVE_FLAG)
+                        super.draw(canvas, mapView, shadow)
+                        canvas.restoreToCount(saveCount)
+                    }
+                }
+            }
+
+            binding.mapView.overlays.add(streetOverlay)
+            binding.mapView.invalidate()
+
+            Toast.makeText(this, "🗺️ Labele (tamne)", Toast.LENGTH_SHORT).show()
+
+        } catch (e: Exception) {
+            Log.e("HybridMode", "❌ Custom overlay greška: ${e.message}", e)
+            Toast.makeText(this, "❌ Greška", Toast.LENGTH_SHORT).show()
+        }
+    }
+    private fun addSimpleDarkLabelsOverlay() {
+        try {
+            removeStreetOverlay()
+
+            val osmSource = org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK
+
+            streetOverlay = object : org.osmdroid.views.overlay.TilesOverlay(
+                org.osmdroid.tileprovider.MapTileProviderBasic(
+                    applicationContext,
+                    osmSource
+                ),
+                applicationContext
+            ) {
+                private val labelFilter = android.graphics.ColorMatrixColorFilter(
+                    android.graphics.ColorMatrix().apply {
+                        // 1. Ukloni boje
+                        setSaturation(0f)
+
+                        // 2. Povećaj kontrast
+                        val contrast = 1.8f
+                        val scale = contrast
+                        val translate = (-0.5f * contrast + 0.5f) * 255f
+
+                        val contrastMatrix = floatArrayOf(
+                            scale, 0f, 0f, 0f, translate,
+                            0f, scale, 0f, 0f, translate,
+                            0f, 0f, scale, 0f, translate,
+                            0f, 0f, 0f, 0.35f, 0f  // Alpha: 35% neprozirno
+                        )
+
+                        set(android.graphics.ColorMatrix(contrastMatrix))
+                    }
+                )
+
+                private val labelPaint = android.graphics.Paint()
+
+                init {
+                    labelPaint.colorFilter = labelFilter
+                    // Postavi transparentnost preko Paint-a
+                    labelPaint.alpha = (255 * 0.35).toInt()
+                }
+
+                override fun draw(canvas: android.graphics.Canvas, mapView: MapView?, shadow: Boolean) {
+                    if (!shadow && mapView != null) {
+                        val saveCount = canvas.save()
+
+                        canvas.saveLayer(null, labelPaint, android.graphics.Canvas.ALL_SAVE_FLAG)
+                        super.draw(canvas, mapView, shadow)
+                        canvas.restoreToCount(saveCount)
+                    }
+                }
+            }
+
+            binding.mapView.overlays.add(streetOverlay)
+
+            // Za prioritet, dodajte na početak overlay-a (da bude ispred ostalih)
+            binding.mapView.overlays.remove(streetOverlay)
+            binding.mapView.overlays.add(0, streetOverlay)
+
+            binding.mapView.invalidate()
+
+            Toast.makeText(this, "🗺️ Tamne labele", Toast.LENGTH_SHORT).show()
+
+        } catch (e: Exception) {
+            Log.e("HybridMode", "❌ Simple dark labels greška: ${e.message}", e)
+            Toast.makeText(this, "❌ Greška", Toast.LENGTH_SHORT).show()
+        }
+    }
+    private fun tryFallbackLabelsOverlay() {
+        try {
+            // ALTERNATIVNI SERVIS: OpenStreetMap samo labele
+            val osmLabelsTileSource = object : org.osmdroid.tileprovider.tilesource.XYTileSource(
+                "OSM_Labels",
+                0,
+                19,
+                256,
+                ".png",
+                arrayOf(
+                    "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                )
+            ) {
+                override fun getTileURLString(pMapTileIndex: Long): String {
+                    val zoom = MapTileIndex.getZoom(pMapTileIndex)
+                    val x = MapTileIndex.getX(pMapTileIndex)
+                    val y = MapTileIndex.getY(pMapTileIndex)
+                    return "https://tile.openstreetmap.org/$zoom/$x/$y.png"
+                }
+            }
+
+            streetOverlay = org.osmdroid.views.overlay.TilesOverlay(
+                org.osmdroid.tileprovider.MapTileProviderBasic(
+                    applicationContext,
+                    osmLabelsTileSource
+                ),
+                applicationContext
+            )
+
+            // POKUŠAJTE DA FILTRIRATE BOJE - napravite labele belim
+            // Ovo je malo komplikovanije, ali možemo probati
+            val filterPaint = Paint().apply {
+                colorFilter = android.graphics.ColorMatrixColorFilter(
+                    android.graphics.ColorMatrix().apply {
+                        setSaturation(0f) // Ukloni boje
+                    }
+                )
+                alpha = 200 // Malo prozirno
+            }
+
+            // Ovo možda neće raditi direktno, ali probajmo
+            try {
+                val paintField = streetOverlay!!::class.java.getDeclaredField("mPaint")
+                paintField.isAccessible = true
+                paintField.set(streetOverlay, filterPaint)
+            } catch (e: Exception) {
+                // Ignoriši
+            }
+
+            binding.mapView.overlays.add(streetOverlay)
+            binding.mapView.invalidate()
+
+            Log.d("HybridMode", "✅ OSM labels overlay dodat (fallback)")
+            Toast.makeText(this, "🗺️ Ulice (OSM fallback)", Toast.LENGTH_SHORT).show()
+
+        } catch (e: Exception) {
+            Log.e("HybridMode", "❌ Fallback takođe pao: ${e.message}")
+            Toast.makeText(this, "❌ Nije moguće dodati labele", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+
+
+    private fun removeStreetOverlay() {
+        streetOverlay?.let {
+            binding.mapView.overlays.remove(it)
+            streetOverlay = null
+            Log.d("HybridMode", "Street overlay uklonjen")
+        }
+    }
     private fun showSatelliteDownloadSuccess(regionName: String, tileCount: Int) {
         AlertDialog.Builder(this)
             .setTitle("🎉 $regionName Preuzeta!")
@@ -4339,6 +5099,36 @@ private fun showPremiumRequiredDialog(featureName: String) {
             }
             .setNegativeButton("🌐 Ostani Online", null)
             .show()
+    }
+
+    private fun fixExistingMetadataFiles() {
+        val metadataDir = File(getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "offline_regions")
+        if (!metadataDir.exists()) return
+
+        metadataDir.listFiles { file -> file.name.endsWith(".json") }?.forEach { file ->
+            try {
+                val metadata = Gson().fromJson(file.readText(), Map::class.java)
+
+                // Ako fajl ima underscore u imenu, popravi ga
+                if (file.name.contains("_")) {
+                    val newName = file.name.replace("_", " ")
+                    val newFile = File(metadataDir, newName)
+
+                    // Dodaj regionName ako ga nema
+                    if (!metadata.containsKey("regionName")) {
+                        val mutableMetadata = metadata.toMutableMap()
+                        mutableMetadata["regionName"] = newName.replace(".json", "")
+                        newFile.writeText(Gson().toJson(mutableMetadata))
+                        file.delete() // Obriši stari fajl
+
+                        Log.d("MetadataFix", "Popravljen fajl: ${file.name} -> $newName")
+                    }
+                }
+
+            } catch (e: Exception) {
+                Log.e("MetadataFix", "Greška pri popravci ${file.name}: ${e.message}")
+            }
+        }
     }
     private fun downloadRegionHighways() {
         // Autoputevi Srbije: A1, A2, A3, A4
@@ -4375,28 +5165,338 @@ private fun showPremiumRequiredDialog(featureName: String) {
         downloadTilesForRegion(bbox, 10, 16, "Nacionalni Parkovi")
     }
 
-    private fun downloadCurrentViewport() {
-        val bbox = binding.mapView.boundingBox
-        val currentZoom = binding.mapView.zoomLevel.toInt()
+    private fun downloadCurrentViewport(minZoom: Int = 12, maxZoom: Int = 14) {
+        val mapView = findViewById<org.osmdroid.views.MapView>(R.id.mapView)
+        val bbox = mapView.boundingBox
 
-        val options = arrayOf("🛰️ Trenutno vidljivo područje (Satelitska)", "🗺️ Trenutno vidljivo područje (Standardna)")
+        // Proverite da li je bbox validan
+        if (bbox == null) {
+            Toast.makeText(this, "❌ Nije moguće preuzeti prazno područje", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Proverite veličinu bounding box-a
+        val latDiff = Math.abs(bbox.latNorth - bbox.latSouth)
+        val lonDiff = Math.abs(bbox.lonEast - bbox.lonWest)
+
+        if (latDiff < 0.001 || lonDiff < 0.001) {  // Previše mali region
+            Toast.makeText(this, "❌ Region je previše mali. Zumirajte malo.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        showRegionNameDialog(bbox, minZoom, maxZoom, isSatellite = false)
+    }
+
+    private fun showRegionNameDialog(bbox: org.osmdroid.util.BoundingBox, minZoom: Int, maxZoom: Int, isSatellite: Boolean) {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_region_name, null)
+
+        val etRegionName = dialogView.findViewById<EditText>(R.id.etRegionName)
+        val tvZoomInfo = dialogView.findViewById<TextView>(R.id.tvZoomInfo)
+        val tvAreaInfo = dialogView.findViewById<TextView>(R.id.tvAreaInfo)
+
+        // Podrazumevano ime
+        val defaultName = if (isSatellite) "Custom Region Satelitski" else "Custom Region"
+        etRegionName.setText(defaultName)
+
+        // Prikaži informacije
+        tvZoomInfo.text = "Zoom: $minZoom-$maxZoom"
+        val areaKm = calculateAreaInKm2(bbox)
+        tvAreaInfo.text = "Površina: ${"%.2f".format(areaKm)} km²"
 
         AlertDialog.Builder(this)
-            .setTitle("📥 Preuzmi Trenutni Prikaz")
-            .setMessage("Izaberite tip mape za preuzimanje:")
-            .setItems(options) { dialog, which ->
-                when (which) {
-                    0 -> { // Satelitska
-                        // DODAJ OZNAKU DA JE SATELITSKA
-                        downloadSatelliteTilesForRegion(bbox, currentZoom, currentZoom + 2, "Trenutni Prikaz Satelitski")
-                    }
-                    1 -> { // Standardna
-                        downloadTilesForRegion(bbox, currentZoom, currentZoom + 2, "Trenutni Prikaz Standardni")
-                    }
+            .setTitle(if (isSatellite) "🛰️ Preuzmi satelitski region" else "🗺️ Preuzmi region")
+            .setView(dialogView)
+            .setPositiveButton("✅ Preuzmi") { dialog, which ->
+                val regionName = etRegionName.text.toString().trim()
+                if (regionName.isNotEmpty()) {
+                    startDownloadWithProgress(bbox, minZoom, maxZoom, regionName, isSatellite)
+                } else {
+                    Toast.makeText(this, "❌ Unesite ime za region", Toast.LENGTH_SHORT).show()
                 }
             }
             .setNegativeButton("❌ Otkaži", null)
             .show()
+    }
+
+    private fun startDownloadWithProgress(bbox: org.osmdroid.util.BoundingBox, minZoom: Int, maxZoom: Int, regionName: String, isSatellite: Boolean) {
+        // PROVERA ZA SATELITSKE
+        val actualMaxZoom = if (isSatellite) {
+            if (maxZoom > 19) {
+                Toast.makeText(this, "⚠️ Satelitske mape podržavaju max zoom 19. Smanjeno na 19.", Toast.LENGTH_LONG).show()
+                19
+            } else {
+                maxZoom
+            }
+        } else {
+            maxZoom  // Standardne mogu do 21
+        }
+
+        // Prikaži info
+        val progressDialog = AlertDialog.Builder(this)
+            .setTitle("${if (isSatellite) "🛰️" else "🗺️"} Preuzimanje: $regionName")
+            .setMessage("Zoom: $minZoom-$actualMaxZoom\n" +
+                    "${if (isSatellite) "Satelitska (max 19)" else "Standardna (max 21)"}")
+            .setCancelable(false)
+            .create()
+        progressDialog.show()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                var totalTiles = 0
+                var downloadedTiles = 0
+
+                // IZRAČUNAJ UKUPAN BROJ TILE-OVA
+                for (zoom in minZoom..maxZoom) {
+                    totalTiles += calculateTilesForZoom(bbox, zoom)
+                }
+
+                withContext(Dispatchers.Main) {
+                    progressDialog.setMessage("Preuzimanje: $regionName\nZoom: $minZoom-$maxZoom\n0/$totalTiles tile-ova")
+                }
+
+                if (isSatellite) {
+                    // SATELITSKA MAPA
+                    for (zoom in minZoom..maxZoom) {
+                        val downloaded = downloadSatelliteZoomLevel(bbox, zoom, regionName, progressDialog, downloadedTiles, totalTiles)
+                        downloadedTiles += downloaded
+                    }
+
+                    saveSatelliteRegionMetadata(bbox, minZoom, maxZoom, regionName, downloadedTiles)
+                } else {
+                    // STANDARDNA MAPA
+                    for (zoom in minZoom..maxZoom) {
+                        val downloaded = downloadStandardZoomLevel(bbox, zoom, regionName, progressDialog, downloadedTiles, totalTiles)
+                        downloadedTiles += downloaded
+                    }
+
+                    saveStandardRegionMetadata(bbox, minZoom, maxZoom, regionName, downloadedTiles)
+                }
+
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    val successMessage = if (downloadedTiles > 0) {
+                        "✅ Preuzeto: $regionName\n$downloadedTiles/$totalTiles tile-ova\nZoom: $minZoom-$maxZoom"
+                    } else {
+                        "⚠️ Nije preuzet nijedan tile. Proverite internet konekciju."
+                    }
+                    Toast.makeText(this@MainActivity, successMessage, Toast.LENGTH_LONG).show()
+
+                    // Osveži listu offline mapa
+                    showOfflineMapsList()
+                }
+
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    progressDialog.dismiss()
+                    Toast.makeText(this@MainActivity, "❌ Greška: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+
+    private fun testZoomLevelsForSatellite() {
+        val testCases = listOf(
+            "Zoom 12-14 (osnovno)" to Pair(12, 14),
+            "Zoom 15-17 (srednje)" to Pair(15, 17),
+            "Zoom 18-19 (visoko)" to Pair(18, 19),
+            "Zoom 20-21 (previsoko - NEĆE RADITI)" to Pair(20, 21)
+        )
+
+        val items = testCases.map { it.first }.toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle("🧪 Test zoom nivoa za satelitske")
+            .setItems(items) { dialog, which ->
+                val (minZoom, maxZoom) = testCases[which].second
+
+                if (maxZoom > 19) {
+                    Toast.makeText(this, "❌ Zoom $maxZoom ne postoji za satelitske!", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(this, "✅ Zoom $minZoom-$maxZoom je podržan", Toast.LENGTH_SHORT).show()
+                    // Testiraj preuzimanje
+                    testDownloadRegion(minZoom, maxZoom)
+                }
+            }
+            .setNegativeButton("❌ Otkaži", null)
+            .show()
+    }
+
+    private fun testDownloadRegion(minZoom: Int, maxZoom: Int) {
+        // Mali test region (centar Beograda)
+        val bbox = org.osmdroid.util.BoundingBox(44.82, 20.47, 44.80, 20.45)
+        startDownloadWithProgress(bbox, minZoom, maxZoom, "TEST Satelitska", true)
+    }
+
+    private fun fixExistingSatelliteMaps() {
+        val metadataDir = File(getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "offline_regions")
+        if (!metadataDir.exists()) return
+
+        metadataDir.listFiles { file -> file.name.endsWith(".json") }?.forEach { file ->
+            try {
+                val metadata = Gson().fromJson(file.readText(), Map::class.java)
+                val isSatellite = metadata["isSatellite"] as? Boolean ?: false
+                val maxZoom = (metadata["maxZoom"] as? Number)?.toInt() ?: 0
+
+                if (isSatellite && maxZoom > 19) {
+                    Log.d("FixMaps", "Popravljam mapu: ${file.name}, maxZoom: $maxZoom -> 19")
+
+                    // Ažuriraj metadata
+                    val updatedMetadata = metadata.toMutableMap()
+                    updatedMetadata["maxZoom"] = 19
+                    updatedMetadata["fixed"] = true
+                    updatedMetadata["originalMaxZoom"] = maxZoom
+
+                    file.writeText(Gson().toJson(updatedMetadata))
+                }
+            } catch (e: Exception) {
+                Log.e("FixMaps", "Greška pri popravci ${file.name}: ${e.message}")
+            }
+        }
+    }
+    private fun saveStandardRegionMetadata(bbox: org.osmdroid.util.BoundingBox, minZoom: Int, maxZoom: Int, regionName: String, tileCount: Int) {
+        // KORISTITE generateUniqueFileName
+        val fileName = generateUniqueFileName(regionName, false)
+
+        val metadata = mapOf(
+            "regionName" to regionName,
+            "displayName" to regionName,
+            "north" to bbox.latNorth,
+            "south" to bbox.latSouth,
+            "east" to bbox.lonEast,
+            "west" to bbox.lonWest,
+            "minZoom" to minZoom,
+            "maxZoom" to maxZoom,
+            "tileCount" to tileCount,
+            "downloadDate" to System.currentTimeMillis(),  // 👈 DODAJTE OVO
+            "downloadDateFormatted" to SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date()), // 👈 I OVO
+            "isSatellite" to false,
+            "type" to "standard"
+        )
+
+        val metadataDir = File(getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "offline_regions")
+        if (!metadataDir.exists()) {
+            metadataDir.mkdirs()
+        }
+
+        val metadataFile = File(metadataDir, fileName)
+        metadataFile.writeText(Gson().toJson(metadata))
+
+        Log.d("MetadataSave", "✅ Sačuvana standardna mapa: $fileName, datum: ${metadata["downloadDateFormatted"]}")
+    }
+    private suspend fun downloadStandardZoomLevel(
+        bbox: org.osmdroid.util.BoundingBox,
+        zoom: Int,
+        regionName: String,
+        progressDialog: AlertDialog,
+        alreadyDownloaded: Int,
+        totalTiles: Int
+    ): Int {
+        var downloaded = 0
+        val northTile = lat2tile(bbox.latNorth, zoom)
+        val southTile = lat2tile(bbox.latSouth, zoom)
+        val eastTile = lon2tile(bbox.lonEast, zoom)
+        val westTile = lon2tile(bbox.lonWest, zoom)
+
+        for (x in westTile..eastTile) {
+            for (y in northTile..southTile) {
+                try {
+                    downloadStandardSingleTile(x, y, zoom)
+                    downloaded++
+
+                    // AŽURIRAJ PROGRESS
+                    if (downloaded % 5 == 0) {
+                        val currentTotal = alreadyDownloaded + downloaded
+                        withContext(Dispatchers.Main) {
+                            progressDialog.setMessage(
+                                "Preuzimanje: $regionName\n" +
+                                        "Standardni tile-ovi\n" +
+                                        "$currentTotal/$totalTiles tile-ova\n" +
+                                        "Progress: ${(currentTotal * 100 / totalTiles)}%"
+                            )
+                        }
+                    }
+
+                } catch (e: Exception) {
+                    Log.e("StandardTile", "Greška pri standardnom tile $zoom/$x/$y: ${e.message}")
+                }
+            }
+        }
+
+        return downloaded
+    }
+
+    private fun downloadStandardSingleTile(x: Int, y: Int, zoom: Int) {
+        // OpenStreetMap tile URL
+        val tileUrl = "https://tile.openstreetmap.org/$zoom/$x/$y.png"
+
+        Log.d("DownloadDebug", "🗺️ Preuzimanje standardnog tila: zoom=$zoom, x=$x, y=$y")
+        Log.d("DownloadDebug", "🔗 URL: $tileUrl")
+
+        val client = OkHttpClient.Builder()
+            .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+
+        val request = Request.Builder()
+            .url(tileUrl)
+            .header("User-Agent", "Mozilla/5.0 (Android GPS Tracker)")
+            .build()
+
+        try {
+            val response = client.newCall(request).execute()
+
+            if (response.isSuccessful) {
+                val tileData = response.body?.bytes()
+                if (tileData != null && tileData.isNotEmpty()) {
+                    saveStandardTileToCache(x, y, zoom, tileData)
+                    Log.d("DownloadDebug", "💾 Sačuvan standardni tile: $zoom/$x/$y")
+                }
+            }
+            response.close()
+        } catch (e: Exception) {
+            Log.e("DownloadDebug", "💥 Greška pri preuzimanju standardnog tila: ${e.message}")
+        }
+    }
+
+    private fun saveStandardTileToCache(x: Int, y: Int, zoom: Int, tileData: ByteArray) {
+        try {
+            // OSMdroid cache putanja za standardne mape
+            val cacheDir = File(Configuration.getInstance().osmdroidBasePath, "tiles/Mapnik")
+
+            if (!cacheDir.exists()) {
+                cacheDir.mkdirs()
+            }
+
+            val tileFile = File(cacheDir, "$zoom/$x/$y.png")
+            tileFile.parentFile?.mkdirs()
+
+            tileFile.writeBytes(tileData)
+
+            Log.d("TileSave", "✅ Standardni tile sačuvan: ${tileFile.absolutePath}")
+
+        } catch (e: Exception) {
+            Log.e("TileSave", "💥 GREŠKA pri čuvanju standardnog tila: ${e.message}")
+        }
+    }
+    private fun downloadCurrentViewportSatellite(minZoom: Int = 12, maxZoom: Int = 14) {
+        val mapView = findViewById<org.osmdroid.views.MapView>(R.id.mapView)
+        val bbox = mapView.boundingBox
+
+        if (bbox == null) {
+            Toast.makeText(this, "❌ Nije moguće preuzeti prazno područje", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val latDiff = Math.abs(bbox.latNorth - bbox.latSouth)
+        val lonDiff = Math.abs(bbox.lonEast - bbox.lonWest)
+
+        if (latDiff < 0.001 || lonDiff < 0.001) {
+            Toast.makeText(this, "❌ Region je previše mali. Zumirajte malo.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        showRegionNameDialog(bbox, minZoom, maxZoom, isSatellite = true)
     }
     private fun downloadTilesForRegion(bbox: org.osmdroid.util.BoundingBox, minZoom: Int, maxZoom: Int, regionName: String) {
         val progressDialog = AlertDialog.Builder(this)
@@ -4449,14 +5549,7 @@ private fun showPremiumRequiredDialog(featureName: String) {
     }
 
 
-    private fun calculateTilesForZoom(bbox: org.osmdroid.util.BoundingBox, zoom: Int): Int {
-        val northTile = lat2tile(bbox.latNorth, zoom)
-        val southTile = lat2tile(bbox.latSouth, zoom)
-        val eastTile = lon2tile(bbox.lonEast, zoom)
-        val westTile = lon2tile(bbox.lonWest, zoom)
 
-        return (eastTile - westTile + 1) * (southTile - northTile + 1)
-    }
 
     private suspend fun downloadZoomLevel(
         bbox: org.osmdroid.util.BoundingBox,
@@ -4525,25 +5618,35 @@ private fun showPremiumRequiredDialog(featureName: String) {
         tileFile.writeBytes(tileData)
     }
 
-    private fun saveRegionMetadata(bbox: org.osmdroid.util.BoundingBox, minZoom: Int, maxZoom: Int, regionName: String, tileCount: Int) {
-        val metadata = mapOf(
-            "regionName" to regionName,
-            "north" to bbox.latNorth,
-            "south" to bbox.latSouth,
-            "east" to bbox.lonEast,
-            "west" to bbox.lonWest,
-            "minZoom" to minZoom,
-            "maxZoom" to maxZoom,
-            "tileCount" to tileCount,
-            "downloadDate" to System.currentTimeMillis()
-        )
-
+    private fun saveRegionMetadata(
+        bbox: org.osmdroid.util.BoundingBox,
+        minZoom: Int,
+        maxZoom: Int,
+        regionName: String,
+        tileCount: Int  // <-- DODAJTE OVO
+    ) {
         val metadataDir = File(getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "offline_regions")
         if (!metadataDir.exists()) {
             metadataDir.mkdirs()
         }
 
-        val metadataFile = File(metadataDir, "${regionName.replace(" ", "_")}.json")
+        val metadataFile = File(metadataDir, "$regionName.json")
+
+        val metadata = mapOf(
+            "regionName" to regionName,
+            "tileCount" to tileCount,  // <-- DODAJTE!
+            "isSatellite" to false,    // <-- STANDARDNA NIJE SATELITSKA
+            "bbox" to mapOf(
+                "north" to bbox.latNorth,
+                "south" to bbox.latSouth,
+                "east" to bbox.lonEast,
+                "west" to bbox.lonWest
+            ),
+            "minZoom" to minZoom,
+            "maxZoom" to maxZoom,
+            "createdAt" to System.currentTimeMillis()
+        )
+
         metadataFile.writeText(Gson().toJson(metadata))
     }
 
@@ -4564,55 +5667,118 @@ private fun showPremiumRequiredDialog(featureName: String) {
             .show()
     }
 
+
     private fun enableOfflineMode(regionName: String) {
         try {
-            Log.d("OfflineDebug", "🔄 Pokrećem offline mod za: $regionName")
+            val metadataDir = File(getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "offline_regions")
 
-            // PROVERITE DA LI JE SATELITSKA ILI STANDARDNA MAPA
-            val isSatellite = regionName.contains("satelit", ignoreCase = true) ||
-                    regionName.contains("satellite", ignoreCase = true)
+            // PRONAĐITE FAJL - KORISTITE var
+            var metadataFile = File(metadataDir, "$regionName.json")
 
-            Log.d("OfflineDebug", "📡 Je li satelitska: $isSatellite")
+            // Ako ne postoji sa .json, pokušajte sa generateUniqueFileName
+            if (!metadataFile.exists()) {
+                val satelliteFileName = generateUniqueFileName(regionName, true)
+                val standardFileName = generateUniqueFileName(regionName, false)
 
-            if (isSatellite) {
-                // PROVERITE TILE-OVE PRVO
-                val satelliteDir = File(Configuration.getInstance().osmdroidBasePath, "tiles/World_Imagery")
-                val tileCount = countTilesInDirectory(satelliteDir)
-                Log.d("OfflineDebug", "🛰️ Satelitski tile-ovi: $tileCount")
+                val satelliteFile = File(metadataDir, satelliteFileName)
+                val standardFile = File(metadataDir, standardFileName)
 
-                if (tileCount > 0) {
-                    // POKUŠAJTE SA PRAVIM TILE SOURCE-OM
-                    val satelliteSource = createSatelliteTileSource()
-                    binding.mapView.setTileSource(satelliteSource)
-                    Log.d("OfflineDebug", "✅ Postavljen satelitski tile source")
-                } else {
-                    Toast.makeText(this, "❌ Nema satelitskih tile-ova!", Toast.LENGTH_LONG).show()
-                    return
+                when {
+                    satelliteFile.exists() -> metadataFile = satelliteFile
+                    standardFile.exists() -> metadataFile = standardFile
+                    else -> {
+                        // Pokušajte da pronađete po imenu
+                        val matchingFiles = metadataDir.listFiles { file ->
+                            file.name.contains(regionName, ignoreCase = true) &&
+                                    file.name.endsWith(".json")
+                        }
+
+                        if (!matchingFiles.isNullOrEmpty()) {
+                            metadataFile = matchingFiles.first()
+                        }
+                    }
                 }
-            } else {
-                // STANDARDNA MAPA
-                binding.mapView.setTileSource(TileSourceFactory.MAPNIK)
-                Log.d("OfflineDebug", "✅ Postavljena standardna mapa")
             }
 
-            // BITNO: ISKLJUČITE INTERNET ZA OFFLINE MOD
-            binding.mapView.setUseDataConnection(false)
-            Log.d("OfflineDebug", "📡 Internet isključen za offline mod")
+            if (metadataFile.exists()) {
+                val metadata = Gson().fromJson(metadataFile.readText(), Map::class.java)
+                val isSatellite = metadata["isSatellite"] as? Boolean ?: false
 
-            binding.btnMapType.setBackgroundResource(R.drawable.button_dark_blue_accent)
+                if (isSatellite) {
+                    Toast.makeText(this, "⚠️ Ova mapa je satelitska", Toast.LENGTH_SHORT).show()
+                    return
+                }
 
-            // OSVEŽITE PRIKAZ
-            binding.mapView.invalidate()
-            binding.mapView.postInvalidate()
+                Log.d("StandardOffline", "🗺️ Aktiviranje standardne offline mape: $regionName")
 
-            Toast.makeText(this, "🛰️ Offline: $regionName", Toast.LENGTH_LONG).show()
-            Log.d("OfflineDebug", "🎉 Offline mod uspešno aktiviran!")
+                // Postavi standardni tile source
+                mapView.setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
 
+                // Isključi online tile-ove
+                mapView.setUseDataConnection(false)
+
+                // Očisti cache za sigurnost
+                mapView.tileProvider.clearTileCache()
+
+                // Osveži prikaz
+                mapView.invalidate()
+
+                // Sačuvaj informacije o aktivnoj mapi
+                currentOfflineMapName = regionName
+                currentOfflineMapIsSatellite = false
+                currentOfflineMapMaxZoom = (metadata["maxZoom"] as? Number)?.toInt() ?: 19
+
+                // SAKRI DUGME ZA HIBRIDNI MOD (samo za satelitske)
+                binding.btnToggleHybrid.visibility = View.GONE
+                isHybridMode = false
+                removeStreetOverlay()
+
+                Toast.makeText(this, "🗺️ Offline: $regionName", Toast.LENGTH_SHORT).show()
+
+            } else {
+                Toast.makeText(this, "❌ Metadata fajl ne postoji", Toast.LENGTH_SHORT).show()
+            }
         } catch (e: Exception) {
-            Log.e("OfflineDebug", "💥 Greška: ${e.message}")
+            Log.e("StandardOffline", "Greška: ${e.message}", e)
             Toast.makeText(this, "❌ Greška: ${e.message}", Toast.LENGTH_SHORT).show()
-            setHighQualityStandardMap()
         }
+    }
+    private fun updateOfflineIndicator(regionName: String, maxZoom: Int) {
+        // Samo prikažite Toast umesto TextView-a
+        Toast.makeText(this, "📴 OFFLINE: $regionName (max zoom: $maxZoom)", Toast.LENGTH_LONG).show()
+
+        // Ili dodajte Snackbar
+        val snackbar = Snackbar.make(
+            findViewById(android.R.id.content),
+            "📴 OFFLINE: $regionName (max zoom: $maxZoom)",
+            Snackbar.LENGTH_LONG
+        )
+        snackbar.setBackgroundTint(Color.parseColor("#4CAF50"))
+        snackbar.show()
+    }
+
+    private fun calculateAreaInKm2(bbox: org.osmdroid.util.BoundingBox): Double {
+        // Približna površina u km²
+        val heightDegrees = bbox.latNorth - bbox.latSouth
+        val widthDegrees = bbox.lonEast - bbox.lonWest
+
+        // 1° latitude ≈ 111.32 km (konstantno)
+        val heightKm = heightDegrees * 111.32
+
+        // 1° longitude varira sa latitudom
+        val avgLatRadians = Math.toRadians((bbox.latNorth + bbox.latSouth) / 2.0)
+        val widthKm = widthDegrees * 111.32 * Math.cos(avgLatRadians)
+
+        return heightKm * widthKm
+    }
+
+    private fun calculateTilesForZoom(bbox: org.osmdroid.util.BoundingBox, zoom: Int): Int {
+        val northTile = lat2tile(bbox.latNorth, zoom)
+        val southTile = lat2tile(bbox.latSouth, zoom)
+        val eastTile = lon2tile(bbox.lonEast, zoom)
+        val westTile = lon2tile(bbox.lonWest, zoom)
+
+        return (eastTile - westTile + 1) * (southTile - northTile + 1)
     }
     // POMOĆNE FUNKCIJE ZA TILE KALKULACIJE
     private fun lat2tile(lat: Double, zoom: Int): Int {
@@ -4624,12 +5790,22 @@ private fun showPremiumRequiredDialog(featureName: String) {
     }
     private fun showOfflineMapsList() {
         val metadataDir = File(getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "offline_regions")
+
+        // Debug log
+        Log.d("OfflineMaps", "Proveravam folder: ${metadataDir.absolutePath}")
+
+        if (!metadataDir.exists()) {
+            Toast.makeText(this, "📭 Nema offline mapa", Toast.LENGTH_LONG).show()
+            downloadOfflineMap()
+            return
+        }
+
         val regionFiles = metadataDir.listFiles { file ->
             file.name.endsWith(".json")
         }
 
-        if (!metadataDir.exists() || regionFiles.isNullOrEmpty()) {
-            Toast.makeText(this, "📭 Nema preuzetih offline mapa", Toast.LENGTH_LONG).show()
+        if (regionFiles.isNullOrEmpty()) {
+            Toast.makeText(this, "📭 Nema offline mapa", Toast.LENGTH_LONG).show()
             downloadOfflineMap()
             return
         }
@@ -4646,49 +5822,84 @@ private fun showPremiumRequiredDialog(featureName: String) {
         tvTitle.text = "🗺️ Offline Mape"
 
         // Kreiraj listu offline mapa
-        val offlineMaps = regionFiles.mapNotNull { file ->
+        val offlineMaps = mutableListOf<OfflineMapItem>()
+
+        regionFiles.forEach { file ->
             try {
                 val metadata = Gson().fromJson(file.readText(), Map::class.java)
-                val tileCount = metadata["tileCount"] as? Int ?: 0
-                val isSatellite = metadata["isSatellite"] as? Boolean ?: false
-                val regionName = metadata["regionName"] as? String ?: "Nepoznata mapa"
 
-                OfflineMapItem(
-                    name = regionName,
-                    tileCount = tileCount,
-                    isSatellite = isSatellite,
-                    file = file,
-                    icon = if (isSatellite) "🛰️" else "🗺️"
+                // U showOfflineMapsList(), u petlji gde učitavate metadata:
+                val regionName = metadata["regionName"] as? String ?: file.nameWithoutExtension
+                val displayName = metadata["displayName"] as? String ?: regionName
+                val tileCount = (metadata["tileCount"] as? Number)?.toInt() ?: 0
+                val isSatellite = metadata["isSatellite"] as? Boolean ?: false
+                val downloadDate = metadata["downloadDateFormatted"] as? String ?: "Nepoznato"
+                val mapType = if (isSatellite) "satellite" else "standard"
+
+// Kreirajte ime za prikaz sa datumom
+                val nameForDisplay = "$displayName\n📅 $downloadDate • 📊 $tileCount tile-ova"
+
+                offlineMaps.add(
+                    OfflineMapItem(
+                        name = nameForDisplay,  // 👈 OVO ĆE PRIKAZATI DATUM
+                        lookupName = regionName,
+                        tileCount = tileCount,
+                        isSatellite = isSatellite,
+                        mapType = mapType,
+                        file = file,
+                        icon = if (isSatellite) "🛰️" else "🗺️",
+                        downloadDate = downloadDate
+                    )
                 )
+
+                Log.d("OfflineMaps", "Učitana: $nameForDisplay, tip: $mapType, tile-ova: $tileCount")
+
             } catch (e: Exception) {
-                null
+                Log.e("OfflineMaps", "Greška pri učitavanju ${file.name}: ${e.message}")
             }
         }
 
-        if (offlineMaps.isEmpty()) {
+        // Sortiraj po imenu
+        val sortedMaps = offlineMaps.sortedBy { it.name }
+
+        if (sortedMaps.isEmpty()) {
             Toast.makeText(this, "📭 Nema validnih offline mapa", Toast.LENGTH_LONG).show()
             downloadOfflineMap()
             return
         }
 
+        // Postavi RecyclerView
         recyclerView.layoutManager = LinearLayoutManager(this)
 
+        // Kreiraj dijalog
         val dialog = AlertDialog.Builder(this)
             .setView(dialogView)
             .create()
 
         dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
 
-        val adapter = OfflineMapsAdapter(offlineMaps) { offlineMap ->
-            if (offlineMap.isSatellite) {
-                enableSatelliteOfflineMode(offlineMap.name)
-            } else {
-                enableOfflineMode(offlineMap.name)
+        // Kreiraj adapter
+        val adapter = OfflineMapsAdapter(sortedMaps,
+            onMapClick = { offlineMap ->
+                Log.d("MapClick", "Kliknuta: ${offlineMap.name}, tip: ${offlineMap.mapType}")
+
+                when (offlineMap.mapType) {
+                    "satellite" -> enableSatelliteOfflineMode(offlineMap.lookupName)
+                    else -> enableOfflineMode(offlineMap.lookupName)
+                }
+                dialog.dismiss()
+            },
+            onDeleteClick = { offlineMap ->
+                deleteOfflineMap(offlineMap, dialog)
+            },
+            onRenameClick = { offlineMap ->
+                showRenameOfflineMapDialog(offlineMap, dialog)
             }
-            dialog.dismiss()
-        }
+        )
+
         recyclerView.adapter = adapter
 
+        // Dugmići
         btnDownloadNew.setOnClickListener {
             dialog.dismiss()
             downloadOfflineMap()
@@ -4698,15 +5909,93 @@ private fun showPremiumRequiredDialog(featureName: String) {
             dialog.dismiss()
         }
 
-        if (offlineMaps.isEmpty()) {
-            recyclerView.visibility = View.GONE
-            tvNoMaps.visibility = View.VISIBLE
+        // Prikaži dijalog
+        dialog.show()
+    }
+    private fun showRenameOfflineMapDialog(offlineMap: OfflineMapItem, parentDialog: AlertDialog) {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_rename_map, null)
+
+        val etNewName = dialogView.findViewById<EditText>(R.id.etNewName)
+        val tvCurrentName = dialogView.findViewById<TextView>(R.id.tvCurrentName)
+
+        // Ekstrahuj samo osnovno ime (bez koordinata)
+        val currentDisplayName = offlineMap.name
+        val currentBaseName = if (currentDisplayName.contains("\n")) {
+            currentDisplayName.substringBefore("\n").trim()
         } else {
-            recyclerView.visibility = View.VISIBLE
-            tvNoMaps.visibility = View.GONE
+            currentDisplayName
         }
 
-        dialog.show()
+        tvCurrentName.text = "Trenutno: $currentBaseName"
+        etNewName.setText(currentBaseName)
+        etNewName.selectAll()
+
+        AlertDialog.Builder(this)
+            .setTitle("✏️ Promeni ime mape")
+            .setView(dialogView)
+            .setPositiveButton("✅ Sačuvaj") { dialog, which ->
+                val newName = etNewName.text.toString().trim()
+                if (newName.isNotEmpty() && newName != currentBaseName) {
+                    renameOfflineMap(offlineMap, newName, parentDialog)
+                } else if (newName.isEmpty()) {
+                    Toast.makeText(this, "❌ Ime ne može biti prazno", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("❌ Otkaži", null)
+            .show()
+    }
+
+    private fun renameOfflineMap(offlineMap: OfflineMapItem, newName: String, parentDialog: AlertDialog) {
+        try {
+            // Pročitaj postojeći metadata
+            val metadata = Gson().fromJson(offlineMap.file.readText(), Map::class.java)
+
+            // Ažuriraj regionName
+            val updatedMetadata = metadata.toMutableMap()
+            updatedMetadata["regionName"] = newName
+
+            // Snimi novi metadata fajl
+            val newFileName = newName.replace("/", "_").replace("\\", "_") + ".json"
+            val newFile = File(offlineMap.file.parentFile, newFileName)
+
+            newFile.writeText(Gson().toJson(updatedMetadata))
+
+            // Obriši stari fajl ako je ime promenjeno
+            if (newFile.absolutePath != offlineMap.file.absolutePath) {
+                offlineMap.file.delete()
+            }
+
+            Toast.makeText(this, "✅ Ime promenjeno u: $newName", Toast.LENGTH_SHORT).show()
+
+            // Osveži dijalog
+            parentDialog.dismiss()
+            showOfflineMapsList()
+
+        } catch (e: Exception) {
+            Toast.makeText(this, "❌ Greška: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+    private fun deleteOfflineMap(offlineMap: OfflineMapItem, parentDialog: AlertDialog) {
+        AlertDialog.Builder(this)
+            .setTitle("🗑️ Brisanje mape")
+            .setMessage("Da li ste sigurni da želite da obrišete:\n\n" +
+                    "${offlineMap.name}\n" +
+                    "${offlineMap.tileCount} tile-ova")
+            .setPositiveButton("✅ Da, obriši") { dialog, which ->
+                // Obriši metadata fajl
+                val deleted = offlineMap.file.delete()
+
+                if (deleted) {
+                    Toast.makeText(this, "✅ Mapa obrisana", Toast.LENGTH_SHORT).show()
+                    // Osveži dijalog
+                    parentDialog.dismiss()
+                    showOfflineMapsList()
+                } else {
+                    Toast.makeText(this, "❌ Greška pri brisanju", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("❌ Otkaži", null)
+            .show()
     }
     private fun deleteAllOfflineMaps() {
         AlertDialog.Builder(this)
@@ -4771,27 +6060,203 @@ private fun showPremiumRequiredDialog(featureName: String) {
         }
     }
     private fun selectCustomRegion() {
+        val zoomLevels = arrayOf(
+            "🗺️ Srednji detalji (zoom 12-14)",
+            "🔍 Visoki detalji (zoom 15-17)",
+            "🔬 Veoma visoki detalji (zoom 18-20)",
+            "📐 Izaberi ručno zoom nivo"
+        )
+
         AlertDialog.Builder(this)
-            .setTitle("🎯 Izaberi Custom Region")
-            .setMessage("""
-            Kako izabrati region:
-            
-            1. Zoom-uj na željeno područje
-            2. Pomeri mapu da vidiš tačno šta želiš
-            3. Klikni OK da preuzmeš trenutno vidljivo područje
-            
-            💡 Savet: Zoom level 12-16 je idealan za offline
-        """.trimIndent())
-            .setPositiveButton("✅ Preuzmi Trenutni Prikaz") { dialog, which ->
-                downloadCurrentViewportCustom()
-            }
-            .setNeutralButton("🔍 Podesi Tačno") { dialog, which ->
-                showCustomRegionSelector()
+            .setTitle("🔍 Nivo detalja")
+            .setItems(zoomLevels) { dialog, which ->
+                when (which) {
+                    0 -> downloadCurrentViewportWithZoom(12, 14)  // Srednji
+                    1 -> downloadCurrentViewportWithZoom(15, 17)  // Visoki
+                    2 -> downloadCurrentViewportWithZoom(18, 20)  // Veoma visoki
+                    3 -> selectManualZoomLevels()                 // Ručno
+                }
             }
             .setNegativeButton("❌ Otkaži", null)
             .show()
     }
 
+    private fun selectCustomRegionWithZoom(minZoom: Int, maxZoom: Int) {
+        // Ovo treba da otvori mapu za izbor regiona
+        // Ako imate funkciju downloadCurrentViewport, promenite je da prihvata zoom parametre
+
+        downloadCurrentViewportWithZoom(minZoom, maxZoom)
+    }
+
+    private fun selectManualZoomLevels() {
+        // Koristite jednostavniji layout
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_simple_zoom, null)
+
+        val seekBarMin = dialogView.findViewById<SeekBar>(R.id.seekBarMinZoom)
+        val seekBarMax = dialogView.findViewById<SeekBar>(R.id.seekBarMaxZoom)
+        val tvMinZoom = dialogView.findViewById<TextView>(R.id.tvMinZoom)
+        val tvMaxZoom = dialogView.findViewById<TextView>(R.id.tvMaxZoom)
+
+        // Osnovne postavke
+        seekBarMin.max = 19 - 3  // Prilagodite max na raspon
+        seekBarMin.progress = 12 - 3  // Progress = željena vrednost - minimum
+
+        seekBarMax.max = 21 - 5  // Prilagodite max na raspon
+        seekBarMax.progress = 16 - 5  // Progress = željena vrednost - minimum
+
+// Ažurirajte tekstove
+        tvMinZoom.text = "Min Zoom: 12"
+        tvMaxZoom.text = "Max Zoom: 16"
+
+        tvMinZoom.text = "Min Zoom: 12"
+        tvMaxZoom.text = "Max Zoom: 16"
+
+        // Listeners
+        seekBarMin.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                val actualValue = progress + 3  // Dodajte minimum nazad
+                tvMinZoom.text = "Min Zoom: $actualValue"
+
+                if (actualValue > (seekBarMax.progress + 5)) {
+                    seekBarMax.progress = actualValue - 5
+                    tvMaxZoom.text = "Max Zoom: ${seekBarMax.progress + 5}"
+                }
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar) {}
+        })
+
+        seekBarMax.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                val actualValue = progress + 5  // Dodajte minimum nazad
+                tvMaxZoom.text = "Max Zoom: $actualValue"
+
+                if (actualValue < (seekBarMin.progress + 3)) {
+                    seekBarMin.progress = actualValue - 3
+                    tvMinZoom.text = "Min Zoom: ${seekBarMin.progress + 3}"
+                }
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar) {}
+        })
+
+        AlertDialog.Builder(this)
+            .setTitle("📐 Izaberite zoom nivo")
+            .setView(dialogView)
+            .setPositiveButton("✅ Nastavi") { dialog, which ->
+                val minZoom = seekBarMin.progress
+                val maxZoom = seekBarMax.progress
+
+                if (maxZoom - minZoom >= 2) {
+                    showMapTypeSelection(minZoom, maxZoom)
+                } else {
+                    Toast.makeText(this, "❌ Razlika mora biti najmanje 2 nivoa", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("❌ Otkaži", null)
+            .show()
+    }
+
+    private fun estimateTilesForZoomRange(minZoom: Int, maxZoom: Int): String {
+        val tileCount = calculateMaxTilesForZoomRange(minZoom, maxZoom)
+        val formattedCount = formatTileCount(tileCount)
+
+        // Dodaj upozorenje ako je previše
+        return when {
+            tileCount > 10_000_000 -> "⚠️ PREVIŠE: $formattedCount tile-ova\n(Potrebno >1GB)"
+            tileCount > 1_000_000 -> "🟡 Veliko: $formattedCount tile-ova\n(~100-500MB)"
+            tileCount > 100_000 -> "🟢 Srednje: $formattedCount tile-ova\n(~10-100MB)"
+            else -> "🟢 Mali: $formattedCount tile-ova\n(<10MB)"
+        }
+    }
+
+    private fun calculateMaxTilesForZoomRange(minZoom: Int, maxZoom: Int): Long {
+        // Broj tile-ova po zoom nivou za celu Zemlju (teorijski maksimum)
+        val tilesPerLevel = mapOf(
+            0 to 1L, 1 to 4L, 2 to 16L, 3 to 64L, 4 to 256L, 5 to 1024L,
+            6 to 4096L, 7 to 16384L, 8 to 65536L, 9 to 262144L,
+            10 to 1048576L, 11 to 4194304L, 12 to 16777216L,
+            13 to 67108864L, 14 to 268435456L, 15 to 1073741824L,
+            16 to 4294967296L, 17 to 17179869184L, 18 to 68719476736L,
+            19 to 274877906944L, 20 to 1099511627776L, 21 to 4398046511104L
+        )
+
+        var totalTiles = 0L
+        for (zoom in minZoom..maxZoom) {
+            totalTiles += tilesPerLevel[zoom] ?: 0L
+        }
+
+        return totalTiles
+    }
+
+    private fun formatTileCount(count: Long): String {
+        return when {
+            count >= 1_000_000_000 -> "${"%.1f".format(count / 1_000_000_000.0)}B" // milijardi
+            count >= 1_000_000 -> "${"%.1f".format(count / 1_000_000.0)}M" // miliona
+            count >= 1_000 -> "${"%.1f".format(count / 1_000.0)}K" // hiljada
+            else -> count.toString()
+        }
+    }
+    private fun showMapTypeSelection(minZoom: Int, maxZoom: Int) {
+        // Proveri da li je maxZoom > 19 za satelitske
+        if (maxZoom > 19) {
+            AlertDialog.Builder(this)
+                .setTitle("⚠️ Upozorenje")
+                .setMessage("Za satelitske mape, maksimalni zoom je 19.\n\n" +
+                        "Željeni max zoom: $maxZoom\n" +
+                        "Maksimum za satelitsku: 19\n\n" +
+                        "Da li želite da:\n" +
+                        "1. Smanjite max zoom na 19 (satelitska)\n" +
+                        "2. Zadržite max zoom $maxZoom (standardna)")
+                .setPositiveButton("🛰️ Satelitska (max 19)") { dialog, which ->
+                    downloadCurrentViewportSatellite(minZoom, 19)
+                }
+                .setNeutralButton("🗺️ Standardna (max $maxZoom)") { dialog, which ->
+                    downloadCurrentViewport(minZoom, maxZoom)
+                }
+                .setNegativeButton("❌ Otkaži", null)
+                .show()
+        } else {
+            // Normalan dijalog ako je maxZoom <= 19
+            AlertDialog.Builder(this)
+                .setTitle("🗺️ Tip mape")
+                .setItems(arrayOf("🛰️ Satelitska mapa", "🗺️ Standardna mapa")) { dialog, which ->
+                    if (which == 0) {
+                        downloadCurrentViewportSatellite(minZoom, maxZoom)
+                    } else {
+                        downloadCurrentViewport(minZoom, maxZoom)
+                    }
+                }
+                .setNegativeButton("❌ Otkaži", null)
+                .show()
+        }
+    }
+    private fun downloadCurrentViewportWithZoom(minZoom: Int, maxZoom: Int) {
+        // Pozovite postojeću funkciju sa zoom parametrima
+        downloadCurrentViewport(minZoom, maxZoom)
+    }
+
+    private fun updateZoomTexts(
+        tvMinZoom: TextView,
+        tvMaxZoom: TextView,
+        tvWarning: TextView,
+        minZoom: Int,
+        maxZoom: Int
+    ) {
+        tvMinZoom.text = "Min Zoom: $minZoom"
+        tvMaxZoom.text = "Max Zoom: $maxZoom"
+
+        // Izračunaj približan broj tile-ova
+        val zoomDiff = maxZoom - minZoom
+        val estimatedTiles = when {
+            zoomDiff <= 2 -> "🟢 Mali broj tile-ova (~100-500)"
+            zoomDiff <= 4 -> "🟡 Srednji broj tile-ova (~500-2000)"
+            zoomDiff <= 6 -> "🟠 Veliki broj tile-ova (~2000-10000)"
+            else -> "🔴 Ogroman broj tile-ova (10k+)"
+        }
+
+        tvWarning.text = "Razlika: $zoomDiff nivoa\n$estimatedTiles"
+    }
     private fun downloadCurrentViewportCustom() {
         val bbox = binding.mapView.boundingBox
         val currentZoom = binding.mapView.zoomLevel.toInt()
@@ -4963,11 +6428,16 @@ private fun showPremiumRequiredDialog(featureName: String) {
             Toast.makeText(this, "? Greška: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
-    private fun showOfflineStatus(isOffline: Boolean) {
-        if (isOffline) {
-            // MOŽEŠ DODATI TEKST ILI INDIKATOR DA JE OFFLINE MODE
-            Toast.makeText(this, "📱 Offline Mode - bez interneta", Toast.LENGTH_SHORT).show()
-        }
+    private fun showOfflineStatus(regionName: String, maxZoom: Int, isSatellite: Boolean) {
+        // Samo Toast, bez dodatnog koda
+        val icon = if (isSatellite) "🛰️" else "🗺️"
+        val type = if (isSatellite) "satelitska" else "standardna"
+
+        Toast.makeText(
+            this,
+            "$icon $type offline: $regionName\nMax zoom: $maxZoom",
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     private fun deleteOfflineMaps() {
@@ -5040,7 +6510,7 @@ private fun showPremiumRequiredDialog(featureName: String) {
             binding.btnMapType.setBackgroundResource(R.drawable.button_dark_blue_accent)
 
             // PODEŠAVANJA ZA BOLJI PRIKAZ
-            binding.mapView.maxZoomLevel = 16.0  // Limit zoom za satelitsku
+            binding.mapView.maxZoomLevel = 23.0  // Limit zoom za satelitsku
             binding.mapView.controller.setZoom(10.0)  // Automatski zoom out
 
             Toast.makeText(this, "🛰️ Satelitski prikaz - koristite za pregled terena", Toast.LENGTH_LONG).show()
@@ -5118,8 +6588,8 @@ private fun showPremiumRequiredDialog(featureName: String) {
             binding.btnMapType.setBackgroundResource(R.drawable.button_dark_blue_accent)
 
             // SMANJI max zoom za brzinu
-            binding.mapView.maxZoomLevel = 16.0
-            binding.mapView.controller.setZoom(12.0) // Smanji zoom
+            binding.mapView.maxZoomLevel = 21.0
+            binding.mapView.controller.setZoom(14.0) // Smanji zoom
 
             // Vizuelni efekat - svetlija pozadina
             binding.mapView.setBackgroundColor(Color.WHITE)

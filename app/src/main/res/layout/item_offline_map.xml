@@ -1,57 +1,100 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
+<androidx.cardview.widget.CardView
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:padding="16dp"
-    android:background="#FFFFFF"
-    android:gravity="center_vertical">
+    android:layout_margin="8dp"
+    app:cardBackgroundColor="#FFFFFF"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="2dp"
+    app:contentPadding="4dp">
 
-    <!-- Icon -->
-    <TextView
-        android:id="@+id/tvIcon"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:gravity="center"
-        android:text="🗺️"
-        android:textSize="18sp"
-        android:layout_marginEnd="12dp" />
-
-    <!-- Map Info -->
     <LinearLayout
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:background="#FFFFFF">
 
-        <TextView
-            android:id="@+id/tvMapName"
-            android:layout_width="wrap_content"
+        <!-- Prvi red: Ikonica i osnovne informacije -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Naziv mape"
-            android:textColor="#212121"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:maxLines="1"
-            android:ellipsize="end" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
-        <TextView
-            android:id="@+id/tvTileCount"
+            <!-- Ikonica -->
+            <TextView
+                android:id="@+id/tvIcon"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:gravity="center"
+                android:text="🗺️"
+                android:textSize="20sp"
+                android:layout_marginEnd="12dp" />
+
+            <!-- Glavni sadržaj -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <!-- Naziv mape (može imati 2 reda za Custom regione) -->
+                <TextView
+                    android:id="@+id/tvMapName"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Naziv mape"
+                    android:textColor="#212121"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:maxLines="3"
+                    android:ellipsize="end" />
+
+                <!-- Dodatne informacije -->
+                <TextView
+                    android:id="@+id/tvAdditionalInfo"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Zoom: 0-0 | Datum: 01.01.2024"
+                    android:textColor="#757575"
+                    android:textSize="11sp"
+                    android:maxLines="2" />
+
+            </LinearLayout>
+
+            <!-- Broj tile-ova -->
+            <TextView
+                android:id="@+id/tvTileCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:background="#1976D2"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="6dp"
+                android:layout_marginStart="8dp" />
+
+        </LinearLayout>
+
+        <!-- Dugme za brisanje (opciono) -->
+        <Button
+            android:id="@+id/btnDelete"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="0 tile-ova"
-            android:textColor="#757575"
-            android:textSize="12sp"
-            android:layout_marginTop="2dp" />
+            android:layout_height="28dp"
+            android:layout_marginTop="12dp"
+            android:layout_gravity="end"
+            android:text="🗑️ Obriši"
+            android:textColor="#D32F2F"
+            android:textSize="11sp"
+            android:background="#FFEBEE"
+            android:paddingHorizontal="12dp" />
+
     </LinearLayout>
 
-    <!-- Arrow -->
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="▶️"
-        android:textSize="12sp"
-        android:layout_marginStart="8dp" />
-
-</LinearLayout>
+</androidx.cardview.widget.CardView>

@@ -1239,14 +1239,69 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun addStamenTerrainLabelsOverlay() {
+        try {
+            // Ukloni postojeći street overlay ako postoji
+            removeStreetOverlay()
+
+            // Stamen Terrain samo labele - tamnije nego Toner
+            val terrainLabelsSource = object : org.osmdroid.tileprovider.tilesource.XYTileSource(
+                "Stamen_Terrain_Labels",
+                0,
+                18,
+                256,
+                ".png",
+                arrayOf(
+                    "https://stamen-tiles.a.ssl.fastly.net/terrain-labels/{z}/{x}/{y}.png"
+                )
+            ) {
+                override fun getTileURLString(pMapTileIndex: Long): String {
+                    val zoom = MapTileIndex.getZoom(pMapTileIndex)
+                    val x = MapTileIndex.getX(pMapTileIndex)
+                    val y = MapTileIndex.getY(pMapTileIndex)
+                    return "https://stamen-tiles.a.ssl.fastly.net/terrain-labels/$zoom/$x/$y.png"
+                }
+            }
+
+            streetOverlay = org.osmdroid.views.overlay.TilesOverlay(
+                org.osmdroid.tileprovider.MapTileProviderBasic(
+                    applicationContext,
+                    terrainLabelsSource
+                ),
+                applicationContext
+            )
+
+            // Postavi alpha kroz refleksiju
+            try {
+                val alphaField = streetOverlay!!::class.java.getDeclaredField("mAlpha")
+                alphaField.isAccessible = true
+                alphaField.set(streetOverlay, 1.0f)
+            } catch (e: Exception) {
+                Log.w("HybridDebug", "Ne mogu postaviti alpha: ${e.message}")
+            }
+
+            binding.mapView.overlays.add(streetOverlay)
+            binding.mapView.invalidate()
+
+            Log.d("HybridMode", "✅ Stamen Terrain Labels overlay dodat")
+            Toast.makeText(this, "🗺️ Tamnije labele", Toast.LENGTH_SHORT).show()
+
+        } catch (e: Exception) {
+            Log.e("HybridMode", "❌ Stamen Terrain Labels greška: ${e.message}", e)
+            throw e
+        }
+    }
+
 
     private fun addStamenTonerOverlay() {
         try {
             Log.d("HybridMode", "🔧 Stamen Toner overlay pokušaj...")
 
             // Prvo probaj CartoDB dark labels (najbolje)
-            addCartoDBLabelsOverlay()
-
+            //addCartoDBLabelsOverlay()  //svetlo sive, nisu loše
+             addCartoDBPositronLabelsOverlay()  // dobar, svetlo siva
+            // addStamenTerrainLabelsOverlay() // ne učitava
+            // addStamenTonerLabelsOverlay() // ne učitava
         } catch (e: Exception) {
             Log.e("HybridMode", "❌ CartoDB greška, pokušavam Stamen Toner Labels: ${e.message}")
 
@@ -5060,82 +5115,166 @@ private fun showPremiumRequiredDialog(featureName: String) {
 
     private fun addOSMCartoLabelsOverlay() {
         try {
-            Log.d("HybridDebug", "Dodajem OSM Carto labels overlay...")
-
+            // Ukloni postojeći street overlay ako postoji
             removeStreetOverlay()
 
-            // OpenStreetMap Carto
-            val osmSource = org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK
+            // OpenStreetMap Carto samo labele
+            val osmLabelsSource = object : org.osmdroid.tileprovider.tilesource.XYTileSource(
+                "OSM_Carto_Labels",
+                0,
+                19,
+                256,
+                ".png",
+                arrayOf(
+                    "https://tileserver.osm.org/osm/{z}/{x}/{y}.png"
+                )
+            ) {
+                override fun getTileURLString(pMapTileIndex: Long): String {
+                    val zoom = MapTileIndex.getZoom(pMapTileIndex)
+                    val x = MapTileIndex.getX(pMapTileIndex)
+                    val y = MapTileIndex.getY(pMapTileIndex)
+                    return "https://tileserver.osm.org/osm/$zoom/$x/$y.png"
+                }
 
-            streetOverlay = object : org.osmdroid.views.overlay.TilesOverlay(
+                // Ova metoda ne radi dobro sa OSM jer vraća celu mapu
+                // Umesto toga, koristimo specijalni tile source samo za labele
+            }
+
+            streetOverlay = org.osmdroid.views.overlay.TilesOverlay(
                 org.osmdroid.tileprovider.MapTileProviderBasic(
                     applicationContext,
-                    osmSource
+                    osmLabelsSource
                 ),
                 applicationContext
-            ) {
-                // ColorMatrix koji čuva samo CRNE (labele) a belu pozadinu čini prozirnom
-                private val labelFilter = android.graphics.ColorMatrixColorFilter(
-                    android.graphics.ColorMatrix().apply {
-                        // OVAJ FILTER:
-                        // 1. Bela pozadina (RGB ≈ 255,255,255) postaje potpuno prozirna
-                        // 2. Crne labele (RGB ≈ 0,0,0) ostaju crne
-                        // 3. Ostale boje (zelene, plave itd) se konvertuju u sive nijanse
+            )
 
-                        // Prvo pretvorimo u crno-belo
-                        setSaturation(0f)
-
-                        // Zatim podesimo kontrast da naglasimo labele
-                        val contrast = 2.0f
-                        val scale = contrast
-                        val translate = (-0.5f * contrast + 0.5f) * 255f
-
-                        val contrastMatrix = floatArrayOf(
-                            scale, 0f, 0f, 0f, translate,
-                            0f, scale, 0f, 0f, translate,
-                            0f, 0f, scale, 0f, translate,
-                            0f, 0f, 0f, 1f, 0f
-                        )
-
-                        postConcat(android.graphics.ColorMatrix(contrastMatrix))
-
-                        // Konačno: sve što je svetlo (pozadina) učini prozirnim
-                        // Sve što je tamno (labele) ostavi neprozirno
-                        val finalMatrix = floatArrayOf(
-                            1f, 0f, 0f, 0f, 0f,
-                            0f, 1f, 0f, 0f, 0f,
-                            0f, 0f, 1f, 0f, 0f,
-                            0f, 0f, 0f, 0.7f, 0f  // Alpha kanal: 0.7 = 30% prozirno
-                        )
-
-                        postConcat(android.graphics.ColorMatrix(finalMatrix))
-                    }
-                )
-
-                override fun draw(canvas: Canvas, mapView: MapView?, shadow: Boolean) {
-                    if (!shadow && mapView != null) {
-                        val saveCount = canvas.save()
-
-                        // Primeni filter koji čuva samo labele
-                        val paint = Paint()
-                        paint.colorFilter = labelFilter
-
-                        canvas.saveLayer(null, paint, Canvas.ALL_SAVE_FLAG)
-                        super.draw(canvas, mapView, shadow)
-                        canvas.restoreToCount(saveCount)
-                    }
-                }
+            // Postavi veoma nisku transparentnost da bi se videle samo labele
+            try {
+                val alphaField = streetOverlay!!::class.java.getDeclaredField("mAlpha")
+                alphaField.isAccessible = true
+                alphaField.set(streetOverlay, 0.3f) // Samo 30% neprozirnosti
+            } catch (e: Exception) {
+                Log.w("HybridDebug", "Ne mogu postaviti alpha: ${e.message}")
             }
 
             binding.mapView.overlays.add(streetOverlay)
             binding.mapView.invalidate()
 
-            Log.d("HybridMode", "✅ OSM Carto labels overlay dodat (selektivna transparentnost)")
-            Toast.makeText(this, "🗺️ Samo labele (bez pozadine)", Toast.LENGTH_SHORT).show()
+            Log.d("HybridMode", "✅ OSM Carto Labels overlay dodat")
+            Toast.makeText(this, "🗺️ OSM labele", Toast.LENGTH_SHORT).show()
 
         } catch (e: Exception) {
-            Log.e("HybridMode", "❌ OSM Carto greška: ${e.message}", e)
-            Toast.makeText(this, "❌ Greška sa labelama", Toast.LENGTH_SHORT).show()
+            Log.e("HybridMode", "❌ OSM Carto Labels greška: ${e.message}", e)
+            throw e
+        }
+    }
+
+    private fun addThunderforestLabelsOverlay() {
+        try {
+            // Ukloni postojeći street overlay ako postoji
+            removeStreetOverlay()
+
+            // Thunderforest OpenCycleMap - dobre kontrastne labele
+            // ZAHTEVA API KEY, ali ima free tier
+            val apiKey = "tu-stavi-tvoj-api-key" // Registruj se na thunderforest.com za besplatni ključ
+
+            val tfLabelsSource = object : org.osmdroid.tileprovider.tilesource.XYTileSource(
+                "Thunderforest_OpenCycleMap",
+                0,
+                18,
+                256,
+                ".png",
+                arrayOf(
+                    "https://tile.thunderforest.com/cycle/{z}/{x}/{y}.png?apikey=$apiKey"
+                )
+            ) {
+                override fun getTileURLString(pMapTileIndex: Long): String {
+                    val zoom = MapTileIndex.getZoom(pMapTileIndex)
+                    val x = MapTileIndex.getX(pMapTileIndex)
+                    val y = MapTileIndex.getY(pMapTileIndex)
+                    return "https://tile.thunderforest.com/cycle/$zoom/$x/$y.png?apikey=$apiKey"
+                }
+            }
+
+            streetOverlay = org.osmdroid.views.overlay.TilesOverlay(
+                org.osmdroid.tileprovider.MapTileProviderBasic(
+                    applicationContext,
+                    tfLabelsSource
+                ),
+                applicationContext
+            )
+
+            // Postavi nisku transparentnost
+            try {
+                val alphaField = streetOverlay!!::class.java.getDeclaredField("mAlpha")
+                alphaField.isAccessible = true
+                alphaField.set(streetOverlay, 0.4f) // 40% neprozirnosti
+            } catch (e: Exception) {
+                Log.w("HybridDebug", "Ne mogu postaviti alpha: ${e.message}")
+            }
+
+            binding.mapView.overlays.add(streetOverlay)
+            binding.mapView.invalidate()
+
+            Log.d("HybridMode", "✅ Thunderforest Labels overlay dodat")
+            Toast.makeText(this, "🗺️ Kontrastne labele", Toast.LENGTH_SHORT).show()
+
+        } catch (e: Exception) {
+            Log.e("HybridMode", "❌ Thunderforest Labels greška: ${e.message}", e)
+            throw e
+        }
+    }
+
+    private fun addCartoDBPositronLabelsOverlay() {
+        try {
+            // Ukloni postojeći street overlay ako postoji
+            removeStreetOverlay()
+
+            // CartoDB Positron - svetle labele na providnoj pozadini
+            val positronLabelsSource = object : org.osmdroid.tileprovider.tilesource.XYTileSource(
+                "CartoDB_Positron_Labels",
+                0,
+                18,
+                256,
+                ".png",
+                arrayOf(
+                    "https://cartodb-basemaps-a.global.ssl.fastly.net/light_only_labels/{z}/{x}/{y}.png"
+                )
+            ) {
+                override fun getTileURLString(pMapTileIndex: Long): String {
+                    val zoom = MapTileIndex.getZoom(pMapTileIndex)
+                    val x = MapTileIndex.getX(pMapTileIndex)
+                    val y = MapTileIndex.getY(pMapTileIndex)
+                    return "https://cartodb-basemaps-a.global.ssl.fastly.net/light_only_labels/$zoom/$x/$y.png"
+                }
+            }
+
+            streetOverlay = org.osmdroid.views.overlay.TilesOverlay(
+                org.osmdroid.tileprovider.MapTileProviderBasic(
+                    applicationContext,
+                    positronLabelsSource
+                ),
+                applicationContext
+            )
+
+            // Postavi alpha
+            try {
+                val alphaField = streetOverlay!!::class.java.getDeclaredField("mAlpha")
+                alphaField.isAccessible = true
+                alphaField.set(streetOverlay, 1.0f) // Potpuno neprozirno
+            } catch (e: Exception) {
+                Log.w("HybridDebug", "Ne mogu postaviti alpha: ${e.message}")
+            }
+
+            binding.mapView.overlays.add(streetOverlay)
+            binding.mapView.invalidate()
+
+            Log.d("HybridMode", "✅ CartoDB Positron Labels overlay dodat")
+            Toast.makeText(this, "🗺️ Svetle labele", Toast.LENGTH_SHORT).show()
+
+        } catch (e: Exception) {
+            Log.e("HybridMode", "❌ CartoDB Positron Labels greška: ${e.message}", e)
+            throw e
         }
     }
 

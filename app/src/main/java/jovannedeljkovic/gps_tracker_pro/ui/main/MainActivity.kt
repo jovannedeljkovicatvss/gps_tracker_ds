@@ -1440,22 +1440,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupZoomLimiter() {
-        mapView.addMapListener(object : org.osmdroid.events.MapListener {
+        binding.mapView.addMapListener(object : org.osmdroid.events.MapListener {
             override fun onScroll(event: org.osmdroid.events.ScrollEvent?): Boolean {
                 return false
             }
 
             override fun onZoom(event: org.osmdroid.events.ZoomEvent?): Boolean {
                 event?.let {
-                    val currentZoom = mapView.zoomLevelDouble
+                    val currentZoom = binding.mapView.zoomLevelDouble
 
                     // Proveri da li smo u offline modu
-                    if (!mapView.useDataConnection() && currentOfflineMapMaxZoom > 0) {
+                    if (!binding.mapView.useDataConnection() && currentOfflineMapMaxZoom > 0) {
                         if (currentZoom > currentOfflineMapMaxZoom) {
                             // Blokiraj zoom iznad max
                             Handler(Looper.getMainLooper()).postDelayed({
-                                mapView.controller.setZoom(currentOfflineMapMaxZoom.toDouble())
-                                // Prikaži Toast umesto Snackbar
+                                binding.mapView.controller.setZoom(currentOfflineMapMaxZoom.toDouble())
                                 Toast.makeText(
                                     this@MainActivity,
                                     "📏 Max zoom za offline: $currentOfflineMapMaxZoom",
@@ -1470,9 +1469,6 @@ class MainActivity : AppCompatActivity() {
             }
         })
     }
-
-
-
     private fun enableOnlineMode() {
         try {
             Log.d("OnlineMode", "🌐 Uključujem online mod")
@@ -1486,12 +1482,9 @@ class MainActivity : AppCompatActivity() {
             currentOfflineMapMaxZoom = 21
             currentOfflineMapIsSatellite = false
 
-            // Postavi normalne zoom limite
+            // Postavi normalne zoom limite - VRAĆENO NA 23
             binding.mapView.maxZoomLevel = 23.0
             binding.mapView.minZoomLevel = 3.0
-
-            // Očisti cache (opciono)
-            // binding.mapView.tileProvider.clearTileCache()
 
             // Sakrij dugme za hibridni mod
             binding.btnToggleHybrid.visibility = View.GONE
@@ -1508,7 +1501,6 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "❌ Greška pri online modu", Toast.LENGTH_SHORT).show()
         }
     }
-
 
     private fun setupBackgroundLocationReceiver() {
         backgroundLocationReceiver = object : BroadcastReceiver() {
@@ -1705,27 +1697,23 @@ private fun checkButtonAvailability() {
 }
     private fun setupEnhancedMapConfiguration() {
         try {
-            // POBOLJŠANA KONFIGURACIJA ZA BOLJI QUALITY
             Configuration.getInstance().apply {
                 userAgentValue = packageName
-                cacheMapTileCount = 3000  // Povećan cache
-                tileDownloadThreads = 4   // Više threadova za download
+                cacheMapTileCount = 3000
+                tileDownloadThreads = 4
                 tileFileSystemThreads = 3
                 tileDownloadMaxQueueSize = 200
             }
 
-            // PODEŠAVANJA ZA BOLJU OŠTRINU
             binding.mapView.apply {
                 setMultiTouchControls(true)
                 minZoomLevel = 3.0
-                maxZoomLevel = 23.0  // Povećan max zoom za više detalja
+                maxZoomLevel = 23.0  // VRAĆENO NA 23
                 setTilesScaledToDpi(true)
                 setUseDataConnection(true)
                 isHorizontalMapRepetitionEnabled = true
                 isVerticalMapRepetitionEnabled = true
                 isTilesScaledToDpi = true
-
-                // BITNO: Omogući hardware acceleration za bolju performance
                 setLayerType(View.LAYER_TYPE_HARDWARE, null)
             }
 
@@ -1795,7 +1783,7 @@ private fun checkButtonAvailability() {
         try {
             binding.mapView.setTileSource(TileSourceFactory.MAPNIK)
             binding.btnMapType.setBackgroundResource(R.drawable.button_dark_blue_accent)
-            binding.mapView.maxZoomLevel = 22.0
+            binding.mapView.maxZoomLevel = 23.0  // VRAĆENO NA 23
 
             // PODEŠAVANJA ZA BOLJU OŠTRINU
             binding.mapView.setTilesScaledToDpi(true)
@@ -1968,9 +1956,8 @@ private fun checkButtonAvailability() {
             binding.mapView.setTileSource(satelliteSource)
             binding.mapView.setUseDataConnection(false) // Offline mode
 
-            // Postavi zoom limit (19 za satelitske)
-            val actualMaxZoom = minOf(maxZoom, 19)
-            binding.mapView.maxZoomLevel = actualMaxZoom.toDouble()
+            // POSTAVI ORIGINALNE ZOOM LIMITE - 23 umesto 19
+            binding.mapView.maxZoomLevel = 23.0  // VRAĆENO NA 23
             binding.mapView.minZoomLevel = 3.0
 
             // Očisti cache za sigurnost
@@ -1979,18 +1966,18 @@ private fun checkButtonAvailability() {
             // Sačuvaj informacije
             currentOfflineMapName = regionName
             currentOfflineMapIsSatellite = true
-            currentOfflineMapMaxZoom = actualMaxZoom
+            currentOfflineMapMaxZoom = maxZoom  // Sačuvaj original maxZoom iz metadata
 
             // Prikaži dugme za hibridni mod
             binding.btnToggleHybrid.visibility = View.VISIBLE
             isHybridMode = false
-            removeStreetOverlay() // Ukloni prethodni overlay
+            removeStreetOverlay()
 
             // Invalidate
             binding.mapView.invalidate()
 
             // Poruka korisniku
-            showOfflineStatus(regionName, actualMaxZoom, true)
+            showOfflineStatus(regionName, maxZoom, true)  // Prikaži original maxZoom
             Toast.makeText(this, "🛰️ Satelitska offline: $regionName ($tileCount tile-ova)", Toast.LENGTH_SHORT).show()
 
         } catch (e: Exception) {
@@ -2003,7 +1990,7 @@ private fun checkButtonAvailability() {
         return object : XYTileSource(
             "ArcGIS_World_Imagery",
             0,      // Min zoom
-            19,     // Max zoom - ISPRAVLJENO: 19 umesto 23
+            23,     // Max zoom - VRAĆENO NA 23
             256,    // Tile size
             ".png", // Extension
             arrayOf(
@@ -2016,13 +2003,7 @@ private fun checkButtonAvailability() {
                 val x = MapTileIndex.getX(pMapTileIndex)
                 val y = MapTileIndex.getY(pMapTileIndex)
 
-                // Pravilni redosled za ArcGIS: {z}/{y}/{x}
                 return "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/$zoom/$y/$x"
-            }
-
-            override fun getDrawable(pTileRequestState: String?): Drawable? {
-                // Ovo osigurava da se koristi cache kada je offline
-                return super.getDrawable(pTileRequestState)
             }
         }
     }
@@ -2056,6 +2037,8 @@ private fun checkButtonAvailability() {
             }
         }
     }
+
+
     private fun enableStandardModeInternal(regionName: String, maxZoom: Int, tileCount: Int) {
         try {
             Log.d("StandardMode", "🗺️ Uključujem STANDARDNI mod: $regionName")
@@ -2064,9 +2047,8 @@ private fun checkButtonAvailability() {
             binding.mapView.setTileSource(TileSourceFactory.MAPNIK)
             binding.mapView.setUseDataConnection(false) // Offline mode
 
-            // Postavi zoom limit (21 za standardne)
-            val actualMaxZoom = minOf(maxZoom, 21)
-            binding.mapView.maxZoomLevel = actualMaxZoom.toDouble()
+            // POSTAVI ORIGINALNE ZOOM LIMITE
+            binding.mapView.maxZoomLevel = 23.0  // VRAĆENO NA 23
             binding.mapView.minZoomLevel = 3.0
 
             // Očisti cache
@@ -2075,7 +2057,7 @@ private fun checkButtonAvailability() {
             // Sačuvaj informacije
             currentOfflineMapName = regionName
             currentOfflineMapIsSatellite = false
-            currentOfflineMapMaxZoom = actualMaxZoom
+            currentOfflineMapMaxZoom = maxZoom  // Sačuvaj original maxZoom
 
             // Sakrij dugme za hibridni mod (za standardne mape)
             binding.btnToggleHybrid.visibility = View.GONE
@@ -2086,7 +2068,7 @@ private fun checkButtonAvailability() {
             binding.mapView.invalidate()
 
             // Poruka korisniku
-            showOfflineStatus(regionName, actualMaxZoom, false)
+            showOfflineStatus(regionName, maxZoom, false)  // Prikaži original maxZoom
             Toast.makeText(this, "🗺️ Standardna offline: $regionName ($tileCount tile-ova)", Toast.LENGTH_SHORT).show()
 
         } catch (e: Exception) {
@@ -3255,7 +3237,7 @@ $battery
             binding.mapView.setTileSource(TileSourceFactory.MAPNIK)
             binding.mapView.setMultiTouchControls(true)
             binding.mapView.minZoomLevel = 3.0
-            binding.mapView.maxZoomLevel = 19.0
+            binding.mapView.maxZoomLevel = 23.0
             binding.mapView.setTilesScaledToDpi(true)
 
             val compassOverlay = CompassOverlay(this, InternalCompassOrientationProvider(this), binding.mapView)
@@ -7502,14 +7484,14 @@ private fun showPremiumRequiredDialog(featureName: String) {
             binding.mapView.setTileSource(TileSourceFactory.MAPNIK)
             binding.btnMapType.setBackgroundResource(R.drawable.button_dark_blue_accent)
 
-            // POVEĆAJ max zoom za više detalja
-            binding.mapView.maxZoomLevel = 22.0
-            binding.mapView.controller.setZoom(18.0) // Automatski zumiraj
+            // POVEĆAJ max zoom za više detalja - VRAĆENO NA 23
+            binding.mapView.maxZoomLevel = 23.0
+            binding.mapView.controller.setZoom(18.0)
 
             // Vizuelni efekat - tamnija pozadina
             binding.mapView.setBackgroundColor(Color.parseColor("#2E2E2E"))
 
-            Toast.makeText(this, "🔍 OSM Max detalja (Zoom 22x)", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "🔍 OSM Max detalja (Zoom 23x)", Toast.LENGTH_LONG).show()
             binding.mapView.invalidate()
         } catch (e: Exception) {
             Toast.makeText(this, "Greška pri detaljnoj mapi", Toast.LENGTH_SHORT).show()

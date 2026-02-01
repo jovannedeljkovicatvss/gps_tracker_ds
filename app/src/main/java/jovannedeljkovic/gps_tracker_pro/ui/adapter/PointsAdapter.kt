@@ -4,6 +4,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
+import android.widget.Filter
+import android.widget.Filterable
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import jovannedeljkovic.gps_tracker_pro.R
@@ -16,10 +18,16 @@ class PointsAdapter(
     private var points: List<PointOfInterest>,
     private val onItemClick: (PointOfInterest) -> Unit,
     private val onCheckboxChange: (Int, Boolean) -> Unit
-) : RecyclerView.Adapter<PointsAdapter.PointViewHolder>() {
+) : RecyclerView.Adapter<PointsAdapter.PointViewHolder>(), Filterable {
 
     private val selectedPositions = BooleanArray(points.size) { false }
     private val dateFormat = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
+
+    // DODATO: Lista za filtrirane tačke
+    private var filteredPoints: List<PointOfInterest> = points
+    // DODATO: Mapiranje originalne pozicije -> filtrirana pozicija
+    private val originalToFilteredMap = mutableMapOf<Int, Int>()
+    private val filteredToOriginalMap = mutableMapOf<Int, Int>()
 
     inner class PointViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val checkbox: CheckBox = itemView.findViewById(R.id.checkbox)
@@ -31,16 +39,20 @@ class PointsAdapter(
         init {
             itemView.setOnClickListener {
                 val position = adapterPosition
-                if (position != RecyclerView.NO_POSITION) {
-                    onItemClick(points[position])
+                if (position != RecyclerView.NO_POSITION && position < filteredPoints.size) {
+                    onItemClick(filteredPoints[position])
                 }
             }
 
             checkbox.setOnCheckedChangeListener { _, isChecked ->
                 val position = adapterPosition
-                if (position != RecyclerView.NO_POSITION) {
-                    selectedPositions[position] = isChecked
-                    onCheckboxChange(position, isChecked)
+                if (position != RecyclerView.NO_POSITION && position < filteredPoints.size) {
+                    // Pronađi originalnu poziciju
+                    val originalPosition = filteredToOriginalMap[position]
+                    originalPosition?.let {
+                        selectedPositions[it] = isChecked
+                        onCheckboxChange(it, isChecked)
+                    }
                 }
             }
         }
@@ -53,27 +65,30 @@ class PointsAdapter(
     }
 
     override fun onBindViewHolder(holder: PointViewHolder, position: Int) {
-        val point = points[position]
+        val point = filteredPoints[position]
 
         holder.tvPointName.text = point.name
         holder.tvCoordinates.text = String.format("%.6f, %.6f", point.latitude, point.longitude)
         holder.tvDate.text = dateFormat.format(Date(point.createdAt))
 
-        // Ažuriraj checkbox stanje
-        holder.checkbox.isChecked = selectedPositions[position]
+        // Pronađi originalnu poziciju i ažuriraj checkbox stanje
+        val originalPosition = filteredToOriginalMap[position]
+        holder.checkbox.isChecked = originalPosition?.let { selectedPositions[it] } ?: false
 
         // Ovo možete implementirati kasnije za računanje udaljenosti
         // holder.tvDistance.text = formatDistance(distance)
         // holder.tvDistance.visibility = View.VISIBLE
     }
 
-    override fun getItemCount(): Int = points.size
+    override fun getItemCount(): Int = filteredPoints.size
 
     fun selectAll(select: Boolean) {
         for (i in selectedPositions.indices) {
             selectedPositions[i] = select
         }
         notifyDataSetChanged()
+        // Obavesti da su sve promenjene
+        onCheckboxChange(-1, select)
     }
 
     fun getSelectedPoints(): List<PointOfInterest> {
@@ -81,17 +96,13 @@ class PointsAdapter(
     }
 
     fun updatePoints(newPoints: List<PointOfInterest>) {
-        // OVA LINIJA JE ISPRAVLJENA: ne reassign-ujemo points direktno
         val oldSize = points.size
         val newSize = newPoints.size
 
-        // Ažuriraj listu
         points = newPoints
 
-        // Resetuj selectedPositions array sa novom veličinom
-        // OVO JE KLJUČNA ISPRAVKA:
         if (oldSize != newSize) {
-            // Kreiraj novi array
+            // Kreiraj novi selectedPositions array
             val newSelectedPositions = BooleanArray(newSize) { false }
             // Kopiraj stare vrednosti ako postoje
             for (i in 0 until minOf(oldSize, newSize)) {
@@ -99,12 +110,79 @@ class PointsAdapter(
                     newSelectedPositions[i] = selectedPositions[i]
                 }
             }
-            // Koristi novi array
-            // Napomena: selectedPositions je val, ne možemo reassign
-            // Zato koristimo drugi pristup:
-            System.arraycopy(newSelectedPositions, 0, selectedPositions, 0, minOf(selectedPositions.size, newSelectedPositions.size))
+            // Koristi arraycopy da ažuriraš postojeći array
+            if (newSelectedPositions.size <= selectedPositions.size) {
+                System.arraycopy(newSelectedPositions, 0, selectedPositions, 0, newSelectedPositions.size)
+            }
         }
 
+        // Ažuriraj i filtrirane tačke
+        filteredPoints = points
+        rebuildPositionMaps()
+        notifyDataSetChanged()
+    }
+
+    // ========== METODE ZA PRETRAGU ==========
+
+    override fun getFilter(): Filter {
+        return object : Filter() {
+            override fun performFiltering(constraint: CharSequence?): FilterResults {
+                val results = FilterResults()
+                val filteredList = mutableListOf<PointOfInterest>()
+
+                if (constraint.isNullOrBlank()) {
+                    // Ako nema filtera, vrati sve tačke
+                    filteredList.addAll(points)
+                } else {
+                    val filterPattern = constraint.toString().lowercase(Locale.getDefault()).trim()
+
+                    for (point in points) {
+                        // Pretraga po imenu tačke
+                        if (point.name.lowercase(Locale.getDefault()).contains(filterPattern)) {
+                            filteredList.add(point)
+                        }
+                        // Možeš dodati i pretragu po drugim poljima ako želiš:
+                        // if (point.description?.lowercase()?.contains(filterPattern) == true) {
+                        //     filteredList.add(point)
+                        // }
+                    }
+                }
+
+                results.values = filteredList
+                results.count = filteredList.size
+                return results
+            }
+
+            @Suppress("UNCHECKED_CAST")
+            override fun publishResults(constraint: CharSequence?, results: FilterResults?) {
+                filteredPoints = results?.values as? List<PointOfInterest> ?: emptyList()
+                rebuildPositionMaps()
+                notifyDataSetChanged()
+            }
+        }
+    }
+
+    // Pomoćna metoda za rebuild mape pozicija
+    private fun rebuildPositionMaps() {
+        originalToFilteredMap.clear()
+        filteredToOriginalMap.clear()
+
+        for ((filteredIndex, point) in filteredPoints.withIndex()) {
+            val originalIndex = points.indexOfFirst { it.id == point.id }
+            if (originalIndex != -1) {
+                originalToFilteredMap[originalIndex] = filteredIndex
+                filteredToOriginalMap[filteredIndex] = originalIndex
+            }
+        }
+    }
+
+    // Nova metoda za dobijanje broja filtriranih tačaka
+    fun getFilteredCount(): Int = filteredPoints.size
+
+    // Nova metoda za resetovanje filtera
+    fun resetFilter() {
+        filteredPoints = points
+        rebuildPositionMaps()
         notifyDataSetChanged()
     }
 

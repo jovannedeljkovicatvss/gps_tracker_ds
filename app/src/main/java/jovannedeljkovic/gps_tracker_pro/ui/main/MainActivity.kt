@@ -99,9 +99,11 @@ import android.app.Dialog
 import jovannedeljkovic.gps_tracker_pro.ui.adapter.PointsAdapter
 import jovannedeljkovic.gps_tracker_pro.ui.adapter.RoutesAdapter
 import jovannedeljkovic.gps_tracker_pro.ui.adapter.OfflineMapsAdapter
-import kotlin.math.*
 import android.widget.SeekBar
 import com.google.android.material.snackbar.Snackbar
+import android.graphics.Bitmap
+import android.graphics.drawable.Drawable
+import kotlin.math.*
 import android.view.Menu
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -1054,15 +1056,145 @@ class MainActivity : AppCompatActivity() {
         }, 2000)
     }
 
-        private fun addStamenTonerOverlay() {
+    private fun addStamenTonerLabelsOverlay() {
         try {
-            Log.d("HybridDebug", "Dodajem Stamen Toner overlay (tamniji)...")
-
+            // Ukloni postojeći street overlay ako postoji
             removeStreetOverlay()
 
-            // STAMEN TONER - tamnije labele, bolje za satelit
+            // Toner LABELS - samo labele bez pozadine
+            val tonerLabelsSource = object : org.osmdroid.tileprovider.tilesource.XYTileSource(
+                "Stamen_Toner_Labels",
+                0,
+                18,
+                256,
+                ".png",
+                arrayOf(
+                    "https://stamen-tiles.a.ssl.fastly.net/toner-labels/{z}/{x}/{y}.png"
+                )
+            ) {
+                override fun getTileURLString(pMapTileIndex: Long): String {
+                    val zoom = MapTileIndex.getZoom(pMapTileIndex)
+                    val x = MapTileIndex.getX(pMapTileIndex)
+                    val y = MapTileIndex.getY(pMapTileIndex)
+                    return "https://stamen-tiles.a.ssl.fastly.net/toner-labels/$zoom/$x/$y.png"
+                }
+            }
+
+            streetOverlay = org.osmdroid.views.overlay.TilesOverlay(
+                org.osmdroid.tileprovider.MapTileProviderBasic(
+                    applicationContext,
+                    tonerLabelsSource
+                ),
+                applicationContext
+            )
+
+            // Postavi alpha kroz refleksiju
+            try {
+                val alphaField = streetOverlay!!::class.java.getDeclaredField("mAlpha")
+                alphaField.isAccessible = true
+                alphaField.set(streetOverlay, 1.0f) // Potpuno neprozirno
+            } catch (e: Exception) {
+                Log.w("HybridDebug", "Ne mogu postaviti alpha: ${e.message}")
+            }
+
+            binding.mapView.overlays.add(streetOverlay)
+            binding.mapView.invalidate()
+
+            Log.d("HybridMode", "✅ Stamen Toner Labels overlay dodat")
+            Toast.makeText(this, "🗺️ Crne labele", Toast.LENGTH_SHORT).show()
+
+        } catch (e: Exception) {
+            Log.e("HybridMode", "❌ Stamen Toner Labels greška: ${e.message}", e)
+            throw e // Propusti grešku
+        }
+    }
+
+    private fun addStamenTonerOverlayWithBackgroundRemoval() {
+        try {
             val tonerSource = object : org.osmdroid.tileprovider.tilesource.XYTileSource(
-                "Stamen_Toner",
+                "Stamen_Toner_BG_Removed",
+                0,
+                18,
+                256,
+                ".png",
+                arrayOf(
+                    "https://stamen-tiles.a.ssl.fastly.net/toner/{z}/{x}/{y}.png"
+                )
+            ) {
+                override fun getTileURLString(pMapTileIndex: Long): String {
+                    val zoom = MapTileIndex.getZoom(pMapTileIndex)
+                    val x = MapTileIndex.getX(pMapTileIndex)
+                    val y = MapTileIndex.getY(pMapTileIndex)
+                    return "https://stamen-tiles.a.ssl.fastly.net/toner/$zoom/$x/$y.png"
+                }
+
+                override fun getDrawable(pTileRequestState: String?): Drawable? {
+                    val original = super.getDrawable(pTileRequestState)
+                    return original?.let { removeWhiteBackground(it) }
+                }
+            }
+
+            val tonerOverlay = org.osmdroid.views.overlay.TilesOverlay(
+                org.osmdroid.tileprovider.MapTileProviderBasic(
+                    applicationContext,
+                    tonerSource
+                ),
+                applicationContext
+            )
+
+            // Postavi alpha kroz refleksiju
+            try {
+                val alphaField = tonerOverlay::class.java.getDeclaredField("mAlpha")
+                alphaField.isAccessible = true
+                alphaField.set(tonerOverlay, 1.0f) // Potpuno neprozirno jer smo uklonili pozadinu
+            } catch (e: Exception) {
+                Log.w("HybridDebug", "Ne mogu postaviti alpha: ${e.message}")
+            }
+
+            binding.mapView.overlays.add(tonerOverlay)
+            binding.mapView.invalidate()
+
+            Log.d("HybridMode", "✅ Stamen Toner (bez pozadine) overlay dodat")
+            Toast.makeText(this, "🗺️ Toner bez pozadine", Toast.LENGTH_SHORT).show()
+
+        } catch (e: Exception) {
+            Log.e("HybridMode", "❌ Toner bez pozadine greška: ${e.message}", e)
+            // Konačni fallback - originalni Toner sa veoma malom transparentnošću
+            addFallbackTonerOverlay()
+        }
+    }
+
+    private fun removeWhiteBackground(drawable: Drawable): Drawable {
+        return if (drawable is BitmapDrawable) {
+            val bitmap = drawable.bitmap.copy(Bitmap.Config.ARGB_8888, true)
+
+            // Prolazimo kroz sve piksele i uklanjamo bele
+            for (x in 0 until bitmap.width) {
+                for (y in 0 until bitmap.height) {
+                    val pixel = bitmap.getPixel(x, y)
+
+                    // Proveri da li je pixel bel ili skoro bel
+                    val red = Color.red(pixel)
+                    val green = Color.green(pixel)
+                    val blue = Color.blue(pixel)
+
+                    // Ako je beli pixel (ili veoma svetao), postavi ga transparentnim
+                    if (red > 240 && green > 240 && blue > 240) {
+                        bitmap.setPixel(x, y, Color.TRANSPARENT)
+                    }
+                }
+            }
+
+            BitmapDrawable(resources, bitmap)
+        } else {
+            drawable
+        }
+    }
+
+    private fun addFallbackTonerOverlay() {
+        try {
+            val tonerSource = object : org.osmdroid.tileprovider.tilesource.XYTileSource(
+                "Stamen_Toner_Fallback",
                 0,
                 18,
                 256,
@@ -1079,7 +1211,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            streetOverlay = org.osmdroid.views.overlay.TilesOverlay(
+            val tonerOverlay = org.osmdroid.views.overlay.TilesOverlay(
                 org.osmdroid.tileprovider.MapTileProviderBasic(
                     applicationContext,
                     tonerSource
@@ -1087,28 +1219,100 @@ class MainActivity : AppCompatActivity() {
                 applicationContext
             )
 
-            // Postavi VEĆU TRANSPARENTNOST za Toner (jer je tamniji)
+            // Postavi alpha kroz refleksiju - veoma mala transparentnost
+            try {
+                val alphaField = tonerOverlay::class.java.getDeclaredField("mAlpha")
+                alphaField.isAccessible = true
+                alphaField.set(tonerOverlay, 0.15f) // Samo 15% neprozirnosti - samo labele će se videti
+            } catch (e: Exception) {
+                Log.w("HybridDebug", "Ne mogu postaviti alpha: ${e.message}")
+            }
+
+            binding.mapView.overlays.add(tonerOverlay)
+            binding.mapView.invalidate()
+
+            Log.d("HybridMode", "✅ Fallback Toner overlay dodat")
+            Toast.makeText(this, "🗺️ Hibridni režim", Toast.LENGTH_SHORT).show()
+
+        } catch (e: Exception) {
+            Log.e("HybridMode", "❌ Konačni fallback greška: ${e.message}", e)
+        }
+    }
+
+
+    private fun addStamenTonerOverlay() {
+        try {
+            Log.d("HybridMode", "🔧 Stamen Toner overlay pokušaj...")
+
+            // Prvo probaj CartoDB dark labels (najbolje)
+            addCartoDBLabelsOverlay()
+
+        } catch (e: Exception) {
+            Log.e("HybridMode", "❌ CartoDB greška, pokušavam Stamen Toner Labels: ${e.message}")
+
+            // Fallback na Stamen Toner Labels
+            try {
+                addStamenTonerLabelsOverlay()
+            } catch (e2: Exception) {
+                Log.e("HybridMode", "❌ Sve metode za labele nisu uspele: ${e2.message}")
+                Toast.makeText(this, "❌ Hibridni mod nije dostupan", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    private fun addCartoDBLabelsOverlay() {
+        try {
+            // Ukloni postojeći street overlay ako postoji
+            removeStreetOverlay()
+
+            // CartoDB samo labele - dark
+            val cartoLabelsSource = object : org.osmdroid.tileprovider.tilesource.XYTileSource(
+                "CartoDB_Dark_Labels",
+                0,
+                18,
+                256,
+                ".png",
+                arrayOf(
+                    "https://cartodb-basemaps-a.global.ssl.fastly.net/dark_only_labels/{z}/{x}/{y}.png"
+                )
+            ) {
+                override fun getTileURLString(pMapTileIndex: Long): String {
+                    val zoom = MapTileIndex.getZoom(pMapTileIndex)
+                    val x = MapTileIndex.getX(pMapTileIndex)
+                    val y = MapTileIndex.getY(pMapTileIndex)
+                    return "https://cartodb-basemaps-a.global.ssl.fastly.net/dark_only_labels/$zoom/$x/$y.png"
+                }
+            }
+
+            streetOverlay = org.osmdroid.views.overlay.TilesOverlay(
+                org.osmdroid.tileprovider.MapTileProviderBasic(
+                    applicationContext,
+                    cartoLabelsSource
+                ),
+                applicationContext
+            )
+
+            // Postavi alpha kroz refleksiju jer setAlpha nije dostupan javno
             try {
                 val alphaField = streetOverlay!!::class.java.getDeclaredField("mAlpha")
                 alphaField.isAccessible = true
-                alphaField.set(streetOverlay, 0.4f) // 60% prozirno - Toner je tamniji
+                alphaField.set(streetOverlay, 1.0f) // Potpuno neprozirno - samo crne labele
             } catch (e: Exception) {
-                Log.w("HybridDebug", "Ne mogu postaviti alpha")
+                Log.w("HybridDebug", "Ne mogu postaviti alpha: ${e.message}")
             }
 
             binding.mapView.overlays.add(streetOverlay)
             binding.mapView.invalidate()
 
-            Log.d("HybridMode", "✅ Stamen Toner overlay dodat")
-            Toast.makeText(this, "🗺️ Tamne labele", Toast.LENGTH_SHORT).show()
+            Log.d("HybridMode", "✅ CartoDB Dark Labels overlay dodat")
+            Toast.makeText(this, "🗺️ Crne labele", Toast.LENGTH_SHORT).show()
 
         } catch (e: Exception) {
-            Log.e("HybridMode", "❌ Stamen Toner greška: ${e.message}", e)
-
-            // Fallback na Toner Lite
-            addStamenTonerLiteOverlay()
+            Log.e("HybridMode", "❌ CartoDB Labels greška: ${e.message}", e)
+            throw e // Propusti grešku da fallback radi
         }
     }
+
+
     private fun toggleHybridMode() {
         try {
             if (isHybridMode) {
@@ -1125,9 +1329,10 @@ class MainActivity : AppCompatActivity() {
                 //addSimpleDarkLabelsOverlay() //labele crne, dobre, ali sloj mnogo osvetljen
 
                 // addCustomLabelOverlay() // nije dobra
-                 addBlackLabelsOnlyOverlay() // Druga opcija
-                // addOSMCartoLabelsOverlay() // Treća opcija
-                //addStamenTonerOverlay() // Prvo probajte tamniji
+                 // addBlackLabelsOnlyOverlay() // nije osvetljen ekran, ali su labele svetlo sive
+                 //addOSMCartoLabelsOverlay() // Labele se dobro vide, ali osvetljena slika
+                addStamenTonerOverlay() // Prvo probajte tamniji
+
 
                 // Ako ne radi, probajte drugu opciju
                 //addOSMCartoLabelsOverlay()
@@ -5179,10 +5384,15 @@ private fun showPremiumRequiredDialog(featureName: String) {
 
 
     private fun removeStreetOverlay() {
-        streetOverlay?.let {
-            binding.mapView.overlays.remove(it)
-            streetOverlay = null
-            Log.d("HybridMode", "Street overlay uklonjen")
+        try {
+            streetOverlay?.let { overlay ->
+                binding.mapView.overlays.remove(overlay)
+                streetOverlay = null
+                binding.mapView.invalidate()
+                Log.d("HybridMode", "🗑️ Street overlay uklonjen")
+            }
+        } catch (e: Exception) {
+            Log.e("HybridMode", "Greška pri uklanjanju overlay-a: ${e.message}", e)
         }
     }
     private fun showSatelliteDownloadSuccess(regionName: String, tileCount: Int) {

@@ -7,7 +7,7 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@drawable/gradient_teal_background" />
+        android:background="#12192c" />
 
     <ScrollView
         android:layout_width="match_parent"
@@ -22,16 +22,14 @@
             android:padding="16dp"
             android:gravity="center_horizontal">
 
-            <!-- LOGO APLIKACIJE -->
             <ImageView
                 android:layout_width="120dp"
                 android:layout_height="120dp"
                 android:src="@drawable/ic_app_logo"
-            android:contentDescription="Logo aplikacije"
-            android:layout_marginBottom="16dp"
-            android:layout_marginTop="10dp" />
+                android:contentDescription="Logo aplikacije"
+                android:layout_marginBottom="16dp"
+                android:layout_marginTop="10dp" />
 
-            <!-- NASLOV PRIJAVA -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -42,6 +40,7 @@
                 android:gravity="center"
                 android:layout_marginBottom="40dp" />
 
+            <!-- EMAIL - ISPRAVLJENO -->
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -51,11 +50,11 @@
                 app:boxCornerRadiusBottomStart="16dp"
                 app:boxCornerRadiusTopEnd="16dp"
                 app:boxCornerRadiusTopStart="16dp"
-                app:boxBackgroundColor="@android:color/white"
-                app:hintTextColor="@android:color/white"
-                app:boxStrokeColor="@android:color/white"
-                app:endIconTint="@android:color/white"
-                app:startIconTint="@android:color/white"
+                app:boxBackgroundColor="#FFFFFF"
+                app:hintTextColor="#666666"
+                app:boxStrokeColor="#666666"
+                app:endIconTint="#666666"
+                app:startIconTint="#666666"
                 app:startIconDrawable="@drawable/ic_email"
                 app:startIconCheckable="false">
 
@@ -64,13 +63,14 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:hint="Email"
-                    android:inputType="textEmailAddress"
-                    android:textColor="@android:color/white"
-                    android:textColorHint="#CCFFFFFF"
-                    android:paddingStart="48dp" />
+                android:inputType="textEmailAddress"
+                android:textColor="#666666"
+                android:textColorHint="#666666"
+                android:paddingStart="48dp" />
 
             </com.google.android.material.textfield.TextInputLayout>
 
+            <!-- PASSWORD - ISPRAVLJENO -->
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -80,28 +80,29 @@
                 app:boxCornerRadiusBottomStart="16dp"
                 app:boxCornerRadiusTopEnd="16dp"
                 app:boxCornerRadiusTopStart="16dp"
-                app:boxBackgroundColor="@android:color/white"
-                app:hintTextColor="@android:color/white"
-                app:boxStrokeColor="@android:color/white"
-                app:endIconTint="@android:color/white"
-                app:startIconTint="@android:color/white"
+                app:boxBackgroundColor="#FFFFFF"
+                app:hintTextColor="#666666"
+                app:boxStrokeColor="#666666"
+                app:endIconTint="#666666"
+                app:startIconTint="#666666"
                 app:startIconDrawable="@drawable/ic_lock"
                 app:startIconCheckable="false"
                 app:passwordToggleEnabled="true"
-                app:passwordToggleTint="@android:color/white">
+                app:passwordToggleTint="#666666">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/etPassword"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:hint="Lozinka"
-                    android:inputType="textPassword"
-                    android:textColor="@android:color/white"
-                    android:textColorHint="#CCFFFFFF"
-                    android:paddingStart="48dp" />
+                android:inputType="textPassword"
+                android:textColor="#666666"
+                android:textColorHint="#666666"
+                android:paddingStart="48dp" />
 
             </com.google.android.material.textfield.TextInputLayout>
 
+            <!-- Ostali delovi ostaju isti -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -128,7 +129,6 @@
                     android:textColor="#E6FFFFFF" />
             </LinearLayout>
 
-            <!-- OVO JE ISPRAVLJENO: Button umesto MaterialButton -->
             <Button
                 android:id="@+id/btnLogin"
                 android:layout_width="match_parent"
@@ -137,7 +137,7 @@
                 android:textSize="18sp"
                 android:textStyle="bold"
                 android:background="@drawable/button_white_rounded"
-                android:textColor="#008B8B"
+                android:textColor="#12192c"
                 android:layout_marginBottom="24dp" />
 
             <LinearLayout
